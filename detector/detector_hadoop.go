@@ -42,7 +42,7 @@ func (d HadoopDetector) Detect(appId string) ([]Process, error) {
 			continue
 		}
 
-		// Process short name
+		// Obtain process' short name
 		spl := strings.Split(strings.SplitN(proc.FullName, " ", 2)[0], ".")
 		sn := spl[len(spl)-1]
 

@@ -8,12 +8,22 @@ import (
 
 func main() {
 	var hd detector.HadoopDetector
-	procs, err := hd.Detect("asdf")
+	hProcs, err := hd.Detect("")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	for _, p := range procs {
+	for _, p := range hProcs {
+		fmt.Println(p)
+	}
+
+	var sd detector.SparkDetector
+	sProcs, err := sd.Detect("")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, p := range sProcs {
 		fmt.Println(p)
 	}
 }
