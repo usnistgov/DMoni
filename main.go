@@ -1,29 +1,48 @@
 package main
 
 import (
-	"fmt"
-	"github.com/lizhongz/dmoni/detector"
+	//"fmt"
 	"log"
+
+	"github.com/lizhongz/dmoni/agent"
+	//"github.com/lizhongz/dmoni/detector"
 )
 
 func main() {
-	var hd detector.HadoopDetector
-	hProcs, err := hd.Detect("")
+	/*
+		var hd detector.HadoopDetector
+		hProcs, err := hd.Detect("")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		for _, p := range hProcs {
+			fmt.Println(p)
+		}
+	*/
+
+	/*
+		var sd detector.SparkDetector
+		sProcs, err := sd.Detect("")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		for _, p := range sProcs {
+			fmt.Println(p)
+		}
+	*/
+
+	ag, err := agent.NewAgent()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	for _, p := range hProcs {
-		fmt.Println(p)
+	app := agent.App{
+		Id:         "",
+		Frameworks: []string{"hadoop", "spark"},
 	}
 
-	var sd detector.SparkDetector
-	sProcs, err := sd.Detect("")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	for _, p := range sProcs {
-		fmt.Println(p)
-	}
+	ag.Register(&app)
+	ag.Monitor()
 }
