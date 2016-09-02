@@ -2,58 +2,99 @@ package agent
 
 import (
 	"bytes"
+	"fmt"
 	"log"
 	"os/exec"
 	"time"
 
-	"github.com/lizhongz/dmoni/detector"
-)
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/grpclog"
 
-// Application info used for monitoring
-type App struct {
-	// Application Id
-	Id string
-	// Frameworks used by this application
-	Frameworks []string
-}
+	"github.com/lizhongz/dmoni/common"
+	"github.com/lizhongz/dmoni/detector"
+	pb "github.com/lizhongz/dmoni/proto/cluster"
+)
 
 type Agent struct {
 	// List of monitored applications
-	apps map[string]App
+	apps map[string]*common.App
 	// Process detectors for different frameworks
 	// (key, value) = (framework, detector)
 	detectors map[string]detector.Detector
 	// Application processes
 	// (key, value) = (app id, process list)
 	appProcs map[string][]detector.Process
+
+	// My node info
+	me common.Node
+	// Managero node info
+	manager common.Node
 }
 
-func NewAgent() (*Agent, error) {
+// Create an agent given manager node's address (IP and port)
+func NewAgent(mIp string, mPort int32) *Agent {
 	ag := &Agent{
-		apps: make(map[string]App),
+		apps: make(map[string]*common.App),
 		detectors: map[string]detector.Detector{
-			"hadoop": detector.HadoopDetector{},
-			"spark":  detector.SparkDetector{},
+			"hadoop": &detector.HadoopDetector{},
+			"spark":  new(detector.SparkDetector),
 		},
 		appProcs: make(map[string][]detector.Process),
+		manager:  common.Node{Ip: mIp, Port: mPort},
+		me:       common.Node{Id: "agent-0", Heartbeat: 0},
 	}
 
-	return ag, nil
+	return ag
+}
+
+func (ag *Agent) Run() {
+	// Say hi to manger periodically
+
+	//go func() {
+	// Create a membership client
+	var opts []grpc.DialOption
+	opts = append(opts, grpc.WithInsecure())
+	conn, err := grpc.Dial(fmt.Sprintf(
+		"%s:%d", ag.manager.Ip, ag.manager.Port), opts...)
+	if err != nil {
+		grpclog.Fatalf("Failed to dial manager: %v", err)
+	}
+	defer conn.Close()
+	client := pb.NewMembershipClient(conn)
+
+	for {
+		grpclog.Printf("Say Hi to manager %s %s:%d",
+			ag.manager.Id, ag.manager.Ip, ag.manager.Port)
+		ma, err := client.SayHi(
+			context.Background(),
+			&pb.NodeInfo{
+				Id:        ag.me.Id,
+				Ip:        ag.me.Ip,
+				Port:      ag.me.Port,
+				Heartbeat: ag.me.Heartbeat,
+			})
+		if err != nil {
+			grpclog.Fatalf("%v.SayHi(_) = _, %v: ", client, err)
+		}
+
+		time.Sleep(5 * time.Second)
+	}
+	//}()
 }
 
 // Register an application
-func (ag *Agent) Register(app *App) {
+func (ag *Agent) Register(app *common.App) {
 	fws := make([]string, len(app.Frameworks))
 	copy(fws, app.Frameworks)
-	log.Print("copied")
-	ag.apps[app.Id] = App{
+	ag.apps[app.Id] = &common.App{
 		Id:         app.Id,
 		Frameworks: fws,
 	}
 }
 
 // Unregister an application
-func (ag *Agent) unregister(appId string) {
+func (ag *Agent) Unregister(appId string) {
 	delete(ag.apps, appId)
 }
 
@@ -76,7 +117,8 @@ func (ag *Agent) Monitor() {
 			for _, p := range ag.appProcs[app.Id] {
 				//TODO(lizhong): configure the path of monitor.py
 				cmd := exec.Command("python",
-					"/home/lnz5/workspace/snapshot/app/monitor.py", "-n", "1", p.Pid)
+					"/home/lnz5/workspace/snapshot/app/monitor.py",
+					"-n", "1", p.Pid)
 				var out bytes.Buffer
 				cmd.Stdout = &out
 				err := cmd.Run()
