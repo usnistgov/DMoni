@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package agent;
+
+// Interfaces exported by agent for monitoring applications
+service MonitorProcs {
+    // Manager registers an application, and agent responds
+    // with the app's processes' info on the node.
+    rpc Register(AppInfo) returns (RegReply) {}
+
+    // Manager deregisters an application, and agent responds
+    // with a success indicator.
+    rpc Deregister(DeregRequest) returns (DeregReply) {}
+
+    // Manager send application info, and agent responds
+    // with the app's processes' info on the node.
+    rpc GetProcesses(ProcRequest) returns (ProcList) {}
+}
+
+message AppInfo {
+    // Application's id
+    string Id = 1;
+    // Framework used
+    repeated string Framework = 2;
+    // Process pattern used to match processes
+    string Pattern = 3;
+}
+
+message Process {
+    // Process's operating system pid
+    int32 Pid = 1;
+    // Process name
+    string Name = 2;
+    // Command line to run the process
+    string Cmd = 3;
+}
+
+message ProcRequest {
+    string AppId = 1;
+}
+
+message ProcList {
+    repeated Process Procs = 1;
+}
+
+// Reply message of Register()
+message RegReply {
+}
+
+// Request message of Deregister()
+message DeregRequest {
+    // Application's Id
+    string AppId = 1;
+}
+
+// Reply message of Deregister()
+message DeregReply {
+}
+

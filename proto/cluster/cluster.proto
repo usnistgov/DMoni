@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package cluster;
 
-// Interface exported by manager for agents
+// Interface exported by manager for clustering
 service Membership {
     // Agent push its node info to manager, and master responds
     // with its own node info.

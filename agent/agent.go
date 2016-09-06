@@ -24,12 +24,14 @@ type Agent struct {
 	detectors map[string]detector.Detector
 	// Application processes
 	// (key, value) = (app id, process list)
-	appProcs map[string][]detector.Process
+	appProcs map[string][]common.Process
 
 	// My node info
 	me common.Node
 	// Managero node info
 	manager common.Node
+
+	// Agent server
 }
 
 // Create an agent given manager node's address (IP and port)
@@ -40,7 +42,7 @@ func NewAgent(mIp string, mPort int32) *Agent {
 			"hadoop": &detector.HadoopDetector{},
 			"spark":  new(detector.SparkDetector),
 		},
-		appProcs: make(map[string][]detector.Process),
+		appProcs: make(map[string][]common.Process),
 		manager:  common.Node{Ip: mIp, Port: mPort},
 		me:       common.Node{Id: "agent-0", Heartbeat: 0},
 	}
@@ -64,8 +66,8 @@ func (ag *Agent) Run() {
 	client := pb.NewMembershipClient(conn)
 
 	for {
-		grpclog.Printf("Say Hi to manager %s %s:%d",
-			ag.manager.Id, ag.manager.Ip, ag.manager.Port)
+		grpclog.Printf("Say Hi to manager %s:%d",
+			ag.manager.Ip, ag.manager.Port)
 		ma, err := client.SayHi(
 			context.Background(),
 			&pb.NodeInfo{
@@ -77,6 +79,10 @@ func (ag *Agent) Run() {
 		if err != nil {
 			grpclog.Fatalf("%v.SayHi(_) = _, %v: ", client, err)
 		}
+
+		ag.manager.Id = ma.Id
+		ag.manager.Heartbeat = ma.Heartbeat
+		grpclog.Printf("manager %s 's heartbeat %d", ag.manager.Id, ag.manager.Heartbeat)
 
 		time.Sleep(5 * time.Second)
 	}

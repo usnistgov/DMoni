@@ -2,6 +2,8 @@ package detector
 
 import (
 	"strings"
+
+	"github.com/lizhongz/dmoni/common"
 )
 
 type HadoopDetector struct{}
@@ -26,14 +28,14 @@ var hadoopAppProcMap = map[string]string{
 
 var hadoopProcPrefix = "org.apache.hadoop"
 
-func (d HadoopDetector) Detect(appId string) ([]Process, error) {
+func (d HadoopDetector) Detect(appId string) ([]common.Process, error) {
 	// Obtain all java processes
 	procs, err := cmd_jps()
 	if err != nil {
 		return nil, err
 	}
 
-	haProcs := []Process{}
+	haProcs := []common.Process{}
 
 	// Filter hadoop and application processes
 	for _, proc := range procs {
@@ -61,7 +63,7 @@ func (d HadoopDetector) Detect(appId string) ([]Process, error) {
 		}
 
 		if valid {
-			haProcs = append(haProcs, Process{
+			haProcs = append(haProcs, common.Process{
 				Pid:       proc.Pid,
 				ShortName: sn,
 				// Full name including command arguments

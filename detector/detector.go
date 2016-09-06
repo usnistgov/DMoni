@@ -1,10 +1,8 @@
 package detector
 
-type Process struct {
-	Pid       string
-	ShortName string
-	FullName  string
-}
+import (
+	"github.com/lizhongz/dmoni/common"
+)
 
 type Detector interface {
 	Detect(appId string) ([]Process, error)

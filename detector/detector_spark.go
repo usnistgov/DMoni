@@ -2,6 +2,8 @@ package detector
 
 import (
 	"strings"
+
+	"github.com/lizhongz/dmoni/common"
 )
 
 type SparkDetector struct{}
@@ -22,14 +24,14 @@ var sparkAppProcMap = map[string]string{
 
 var sparkProcPrefix = "org.apache.spark"
 
-func (d SparkDetector) Detect(appId string) ([]Process, error) {
+func (d SparkDetector) Detect(appId string) ([]common.Process, error) {
 	// Obtain all java processes
 	procs, err := cmd_jps()
 	if err != nil {
 		return nil, err
 	}
 
-	sProcs := []Process{}
+	sProcs := []common.Process{}
 
 	// Filter Spark and application processes
 	for _, proc := range procs {
@@ -57,7 +59,7 @@ func (d SparkDetector) Detect(appId string) ([]Process, error) {
 		}
 
 		if valid {
-			sProcs = append(sProcs, Process{
+			sProcs = append(sProcs, common.Process{
 				Pid:       proc.Pid,
 				ShortName: sn,
 				// Full name including command arguments
