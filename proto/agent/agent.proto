@@ -21,7 +21,7 @@ message AppInfo {
     // Application's id
     string Id = 1;
     // Framework used
-    repeated string Framework = 2;
+    repeated string Frameworks = 2;
     // Process pattern used to match processes
     string Pattern = 3;
 }

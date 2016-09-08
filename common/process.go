@@ -1,7 +1,7 @@
 package common
 
 type Process struct {
-	Pid       string
+	Pid       int32
 	ShortName string
 	FullName  string
 }

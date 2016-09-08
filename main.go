@@ -54,16 +54,25 @@ func main() {
 	mRole := flag.Bool("manager", false, "The role of the monitoring deamon")
 	flag.Parse()
 
-	print(*mRole)
 	if *mRole {
 		// Acting as a manager
 		log.Printf("Dmoni manager")
-		m := manager.NewManager()
+		m := manager.NewManager(
+			&manager.Config{
+				Id:   "manager",
+				Port: 5300,
+			})
 		m.Run()
 	} else {
 		// Acting as an agent
 		log.Printf("Dmoni agent")
-		ag := agent.NewAgent("192.168.0.6", 5300)
+		ag := agent.NewAgent(
+			&agent.Config{
+				Id:      "agent-0",
+				Port:    5301,
+				MngIp:   "192.168.0.6",
+				MngPort: 5300,
+			})
 		ag.Run()
 	}
 
