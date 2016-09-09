@@ -42,6 +42,8 @@ func (s *agentServer) Register(ctx context.Context, in *pb.AppInfo) (*pb.RegRepl
 		return &pb.RegReply{}, errors.New(fmt.Sprintf("App %s already registered", in.Id))
 	}
 
+	grpclog.Printf("Register app %s", in.Id)
+
 	app := &common.App{
 		Id:         in.Id,
 		Frameworks: make([]string, len(in.Frameworks)),
@@ -55,11 +57,12 @@ func (s *agentServer) Register(ctx context.Context, in *pb.AppInfo) (*pb.RegRepl
 
 // Application deregistration service
 func (s *agentServer) Deregister(ctx context.Context, in *pb.DeregRequest) (*pb.DeregReply, error) {
-
 	// Check if the application exists
 	if _, ok := s.ag.apps[in.AppId]; !ok {
 		return nil, nil
 	}
+
+	grpclog.Printf("Deregister app %s", in.AppId)
 
 	delete(s.ag.apps, in.AppId)
 	delete(s.ag.appProcs, in.AppId)
@@ -73,6 +76,8 @@ func (s *agentServer) GetProcesses(ctx context.Context, in *pb.ProcRequest) (*pb
 	if _, ok := s.ag.apps[in.AppId]; !ok {
 		return nil, errors.New(fmt.Sprintf("App %s does not exist", in.AppId))
 	}
+
+	grpclog.Printf("GetProcesses of app %s", in.AppId)
 
 	// Make a process list and Return it
 	list := &pb.ProcList{

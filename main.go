@@ -59,8 +59,9 @@ func main() {
 		log.Printf("Dmoni manager")
 		m := manager.NewManager(
 			&manager.Config{
-				Id:   "manager",
-				Port: 5300,
+				Id:       "manager",
+				NodePort: 5300,
+				AppPort:  5500,
 			})
 		m.Run()
 	} else {
@@ -69,6 +70,7 @@ func main() {
 		ag := agent.NewAgent(
 			&agent.Config{
 				Id:      "agent-0",
+				Ip:      "192.168.0.6",
 				Port:    5301,
 				MngIp:   "192.168.0.6",
 				MngPort: 5300,

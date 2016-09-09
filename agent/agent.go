@@ -106,7 +106,7 @@ func (ag *Agent) Monitor() {
 				cmd.Stdout = &out
 				err := cmd.Run()
 				if err != nil {
-					log.Print(err)
+					log.Print("Failed to get process snapshot: %v", err)
 				}
 				//TODO(lizhong): Storing process info
 				log.Printf("%s %d %s %s\n",

@@ -7,6 +7,8 @@ service Membership {
     // Agent push its node info to manager, and master responds
     // with its own node info.
     rpc SayHi(NodeInfo) returns (NodeInfo) {}
+
+    // TODO(lizhong): Get all the agent nodes
 }
 
 // Cluster node inforamtion.
