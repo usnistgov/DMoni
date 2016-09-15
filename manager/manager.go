@@ -7,13 +7,31 @@ import (
 	"github.com/lizhongz/dmoni/common"
 )
 
+type appMap struct {
+	m map[string]*common.App
+	sync.RWMutex
+}
+
+func newAppMap() *appMap {
+	return &appMap{m: make(map[string]*common.App)}
+}
+
+type agentMap struct {
+	m map[string]*common.Node
+	sync.RWMutex
+}
+
+func newAgentMap() *agentMap {
+	return &agentMap{m: make(map[string]*common.Node)}
+}
+
 type Manager struct {
 	// Monitored applications
-	apps map[string]*common.App
+	apps *appMap
 
 	// Cluster nodes info
 	me     *common.Node
-	agents map[string]*common.Node
+	agents *agentMap
 	// The server providing services for agents
 	masterServer *masterServer
 
@@ -24,6 +42,9 @@ type Manager struct {
 
 	sync.RWMutex
 }
+
+// TODO(lizhong) Functionalities:
+// - Register existing app on agents. Agents pull app list from manster?
 
 type Config struct {
 	// Manager's id
@@ -39,7 +60,7 @@ type Config struct {
 func NewManager(cfg *Config) *Manager {
 	m := new(Manager)
 
-	m.apps = make(map[string]*common.App)
+	m.apps = newAppMap()
 	m.appPort = cfg.AppPort
 	m.appServer = newAppServer(m)
 
@@ -50,7 +71,7 @@ func NewManager(cfg *Config) *Manager {
 		Heartbeat: 0,
 		Timestamp: time.Now(),
 	}
-	m.agents = make(map[string]*common.Node)
+	m.agents = newAgentMap()
 	m.masterServer = newMasterServer(m)
 
 	return m

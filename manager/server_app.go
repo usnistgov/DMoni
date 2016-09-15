@@ -53,21 +53,22 @@ func (s *appServer) Register(ctx context.Context, in *mPb.AppDesc) (*mPb.AppInde
 		Frameworks: make([]string, len(in.Frameworks)),
 	}
 	copy(app.Frameworks, in.Frameworks)
-	s.mng.Lock()
-	s.mng.apps[id] = app
-	s.mng.Unlock()
-
-	var wg sync.WaitGroup
-	wg.Add(len(s.mng.agents))
+	s.mng.apps.Lock()
+	s.mng.apps.m[id] = app
+	s.mng.apps.Unlock()
 
 	// Register the app with all agents
-	for _, ag := range s.mng.agents {
-		go func() {
+	s.mng.agents.RLock()
+	var wg sync.WaitGroup
+	wg.Add(len(s.mng.agents.m))
+	for _, ag := range s.mng.agents.m {
+		go func(ag *common.Node) {
 			defer wg.Done()
 			// Create an agent client
 			client, closeConn, err := getAgentClient(ag.Ip, ag.Port)
 			if err != nil {
 				log.Printf("Failed getAgentClient(): %v", err)
+				return
 			}
 			defer closeConn()
 
@@ -78,15 +79,17 @@ func (s *appServer) Register(ctx context.Context, in *mPb.AppDesc) (*mPb.AppInde
 			}
 			copy(ai.Frameworks, app.Frameworks)
 
-			//grpclog.Printf("Register app %s with agent %s", app.Id, ag.Id)
+			//grpclog.Printf("Register app %s with agent %s:%d", app.Id, ag.Id, ag.Port)
 			newCtx, cancel := context.WithTimeout(ctx, time.Second*1)
 			defer cancel()
 			_, err = client.Register(newCtx, ai)
 			if err != nil {
 				grpclog.Printf("%v.Register(_) = _, %v", client, err)
+				return
 			}
-		}()
+		}(ag)
 	}
+	s.mng.agents.RUnlock()
 	wg.Wait()
 
 	// TODO(lizhong): if failed to propagate app info to agents
@@ -95,26 +98,27 @@ func (s *appServer) Register(ctx context.Context, in *mPb.AppDesc) (*mPb.AppInde
 
 // Deregister an app
 func (s *appServer) Deregister(ctx context.Context, in *mPb.AppIndex) (*mPb.DeregReply, error) {
-	s.mng.RLock()
-	if _, ok := s.mng.apps[in.Id]; !ok {
-		s.mng.RUnlock()
+	s.mng.apps.RLock()
+	if _, ok := s.mng.apps.m[in.Id]; !ok {
+		s.mng.apps.RUnlock()
 		return nil, errors.New(fmt.Sprintf("App %s does not exist", in.Id))
 	}
-	s.mng.RUnlock()
+	s.mng.apps.RUnlock()
 	log.Printf("Deregister app %s", in.Id)
 
-	var wg sync.WaitGroup
-	wg.Add(len(s.mng.agents))
-
 	// Deregister the app with all agents
-	for _, ag := range s.mng.agents {
+	s.mng.agents.RLock()
+	var wg sync.WaitGroup
+	wg.Add(len(s.mng.agents.m))
+	for _, ag := range s.mng.agents.m {
 		// Create a grpc client to an agent
-		go func() {
+		go func(ag *common.Node) {
 			defer wg.Done()
 			// Create an agent client
 			client, closeConn, err := getAgentClient(ag.Ip, ag.Port)
 			if err != nil {
 				log.Printf("Failed getAgentClient(): %v", err)
+				return
 			}
 			defer closeConn()
 
@@ -125,14 +129,16 @@ func (s *appServer) Deregister(ctx context.Context, in *mPb.AppIndex) (*mPb.Dere
 			_, err = client.Deregister(newCtx, &agPb.DeregRequest{AppId: in.Id})
 			if err != nil {
 				grpclog.Printf("%v.Deregister(_) = _, %v", client, err)
+				return
 			}
-		}()
+		}(ag)
 	}
+	s.mng.agents.RUnlock()
 	wg.Wait()
 
-	s.mng.Lock()
-	delete(s.mng.apps, in.Id)
-	s.mng.Unlock()
+	s.mng.apps.Lock()
+	delete(s.mng.apps.m, in.Id)
+	s.mng.apps.Unlock()
 	return &mPb.DeregReply{}, nil
 }
 
@@ -143,30 +149,31 @@ func (s *appServer) GetStatus(ctx context.Context, in *mPb.AppIndex) (*mPb.AppSt
 
 // Get all the processes of an app
 func (s *appServer) GetProcesses(ctx context.Context, in *mPb.AppIndex) (*mPb.AppProcs, error) {
-
-	s.mng.RLock()
-	if _, ok := s.mng.apps[in.Id]; !ok {
-		s.mng.RUnlock()
+	s.mng.apps.RLock()
+	if _, ok := s.mng.apps.m[in.Id]; !ok {
+		s.mng.apps.RUnlock()
 		return nil, errors.New(fmt.Sprintf("App %s does not exist", in.Id))
 	}
-	s.mng.RUnlock()
+	s.mng.apps.RUnlock()
 
 	type agProcs struct {
 		id    string
 		reply *agPb.ProcList
 	}
 	agCh := make(chan *agProcs)
-	var wg sync.WaitGroup
-	wg.Add(len(s.mng.agents))
 
-	for _, ag := range s.mng.agents {
+	s.mng.agents.RLock()
+	var wg sync.WaitGroup
+	wg.Add(len(s.mng.agents.m))
+	for _, ag := range s.mng.agents.m {
 		// Send requests to each agent
-		go func() {
+		go func(ag *common.Node) {
 			defer wg.Done()
 			// Create an agent client
 			client, closeConn, err := getAgentClient(ag.Ip, ag.Port)
 			if err != nil {
 				log.Printf("Failed getAgentClient(): %v", err)
+				return
 			}
 			defer closeConn()
 
@@ -177,10 +184,13 @@ func (s *appServer) GetProcesses(ctx context.Context, in *mPb.AppIndex) (*mPb.Ap
 			list, err := client.GetProcesses(newCtx, &agPb.ProcRequest{AppId: in.Id})
 			if err != nil {
 				grpclog.Printf("%v.GetProcesses(_) = _, %v", client, err)
+				return
 			}
 			agCh <- &agProcs{id: ag.Id, reply: list}
-		}()
+		}(ag)
 	}
+	s.mng.agents.RUnlock()
+
 	go func() {
 		wg.Wait()
 		close(agCh)
@@ -190,7 +200,7 @@ func (s *appServer) GetProcesses(ctx context.Context, in *mPb.AppIndex) (*mPb.Ap
 	procs := make(map[string]*mPb.ProcList)
 	for ag := range agCh {
 		procs[ag.id] = &mPb.ProcList{Procs: make([]*mPb.Process, len(ag.reply.Procs))}
-		log.Printf("processes from agent %s", ag.id)
+		//log.Printf("processes from agent %s", ag.id)
 		for i, p := range ag.reply.Procs {
 			procs[ag.id].Procs[i] = &mPb.Process{
 				Pid:  p.Pid,
@@ -202,6 +212,7 @@ func (s *appServer) GetProcesses(ctx context.Context, in *mPb.AppIndex) (*mPb.Ap
 	return &mPb.AppProcs{NodeProcs: procs}, nil
 }
 
+// Test used to verify if server is blocked or not
 func (s *appServer) Test(ctx context.Context, in *mPb.TRequest) (*mPb.TReply, error) {
 	grpclog.Println("GRPC Test()")
 	return &mPb.TReply{}, nil
@@ -209,6 +220,7 @@ func (s *appServer) Test(ctx context.Context, in *mPb.TRequest) (*mPb.TReply, er
 
 // getAgentClient returns a given agent's client
 func getAgentClient(ip string, port int32) (agPb.MonitorProcsClient, func() error, error) {
+	//TODO(lizhong): Reuse connections to agents
 
 	// Create a grpc client to an agent
 	var opts []grpc.DialOption

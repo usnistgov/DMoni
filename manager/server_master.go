@@ -39,9 +39,10 @@ func (s *masterServer) Run() {
 
 // SayHi registers an agent or updates its info, particularly heartbeat.
 func (s *masterServer) SayHi(ctx context.Context, ni *cPb.NodeInfo) (*cPb.NodeInfo, error) {
-	if _, present := s.mng.agents[ni.Id]; !present {
+	s.mng.agents.Lock()
+	if _, present := s.mng.agents.m[ni.Id]; !present {
 		// Create a new agent
-		s.mng.agents[ni.Id] = &common.Node{
+		s.mng.agents.m[ni.Id] = &common.Node{
 			Id:   ni.Id,
 			Ip:   ni.Ip,
 			Port: ni.Port,
@@ -52,7 +53,9 @@ func (s *masterServer) SayHi(ctx context.Context, ni *cPb.NodeInfo) (*cPb.NodeIn
 	grpclog.Printf("SayHi from %s", ni.Id)
 
 	// Update agent's node info
-	n := s.mng.agents[ni.Id]
+	n := s.mng.agents.m[ni.Id]
+	s.mng.agents.Unlock()
+
 	//n.Ip = ni.Ip
 	//n.Port = ni.Port
 	n.Heartbeat = ni.Heartbeat
