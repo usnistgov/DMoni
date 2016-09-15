@@ -17,6 +17,9 @@ service AppGauge {
     rpc GetStatus(AppIndex) returns (AppStatus) {}
     // Get all the processes of an app
     rpc GetProcesses(AppIndex) returns (AppProcs) {}
+
+    // Test
+    rpc Test(TRequest) returns (TReply) {}
 }
 
 // Application description used to register an app
@@ -70,3 +73,6 @@ message AppProcs {
     // (key, value) = (node, process list)
     map<string, ProcList> NodeProcs = 1;
 }
+
+message TRequest {}
+message TReply {}

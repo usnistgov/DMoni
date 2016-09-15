@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"sync"
 	"time"
 
 	"github.com/lizhongz/dmoni/common"
@@ -20,6 +21,8 @@ type Manager struct {
 	appServer *appServer
 	// Application server port
 	appPort int32
+
+	sync.RWMutex
 }
 
 type Config struct {
@@ -57,7 +60,7 @@ func (m *Manager) Run() {
 
 	go m.masterServer.Run()
 
-	go m.appServer.Run()
+	m.appServer.Run()
 
 	// TODO(lizhong): check if agents are alive
 
@@ -83,7 +86,4 @@ func (m *Manager) Run() {
 
 		m.deregister(app.Id)
 	*/
-
-	for {
-	}
 }

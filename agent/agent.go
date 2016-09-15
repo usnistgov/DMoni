@@ -6,6 +6,7 @@ import (
 	"log"
 	"os/exec"
 	"strconv"
+	"sync"
 	"time"
 
 	"golang.org/x/net/context"
@@ -38,6 +39,8 @@ type Agent struct {
 
 	// Agent server
 	server *agentServer
+
+	sync.RWMutex
 }
 
 type Config struct {
@@ -82,6 +85,11 @@ func (ag *Agent) Run() {
 // Monitoring all applications
 func (ag *Agent) Monitor() {
 	for {
+		// TODO(lizhong): debug
+		//time.Sleep(10 * time.Second)
+		//continue
+		//grpclog.Printf("monitoring")
+
 		for _, app := range ag.apps {
 			// Detect all the running processes for each framework of this app
 			procs := make([]common.Process, 0)
@@ -140,8 +148,8 @@ func (ag *Agent) cast() {
 
 	for {
 		// Say Hi to manager
-		//grpclog.Printf("Say Hi to manager %s:%d",
-		//  ag.manager.Ip, ag.manager.Port)
+		grpclog.Printf("Say Hi to manager %s:%d",
+			ag.manager.Ip, ag.manager.Port)
 		ma, err := client.SayHi(
 			context.Background(),
 			&pb.NodeInfo{

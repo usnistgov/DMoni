@@ -37,10 +37,13 @@ func (s *agentServer) Run() {
 
 // Application registration service
 func (s *agentServer) Register(ctx context.Context, in *pb.AppInfo) (*pb.RegReply, error) {
+	s.ag.RLock()
 	// check if already registered
 	if _, ok := s.ag.apps[in.Id]; ok {
+		s.ag.RUnlock()
 		return &pb.RegReply{}, errors.New(fmt.Sprintf("App %s already registered", in.Id))
 	}
+	s.ag.RUnlock()
 
 	grpclog.Printf("Register app %s", in.Id)
 
@@ -49,8 +52,10 @@ func (s *agentServer) Register(ctx context.Context, in *pb.AppInfo) (*pb.RegRepl
 		Frameworks: make([]string, len(in.Frameworks)),
 	}
 	copy(app.Frameworks, in.Frameworks)
+	s.ag.Lock()
 	s.ag.apps[app.Id] = app
 	s.ag.appProcs[app.Id] = make([]common.Process, 0)
+	s.ag.Unlock()
 
 	return &pb.RegReply{}, nil
 }
@@ -58,24 +63,31 @@ func (s *agentServer) Register(ctx context.Context, in *pb.AppInfo) (*pb.RegRepl
 // Application deregistration service
 func (s *agentServer) Deregister(ctx context.Context, in *pb.DeregRequest) (*pb.DeregReply, error) {
 	// Check if the application exists
+	s.ag.RLock()
 	if _, ok := s.ag.apps[in.AppId]; !ok {
+		s.ag.RUnlock()
 		return nil, nil
 	}
+	s.ag.RUnlock()
 
 	grpclog.Printf("Deregister app %s", in.AppId)
 
+	s.ag.Lock()
 	delete(s.ag.apps, in.AppId)
 	delete(s.ag.appProcs, in.AppId)
+	s.ag.Unlock()
 	return &pb.DeregReply{}, nil
 }
 
 // Obtaining Applications' processes
 func (s *agentServer) GetProcesses(ctx context.Context, in *pb.ProcRequest) (*pb.ProcList, error) {
-
+	s.ag.RLock()
 	// check if application exists
 	if _, ok := s.ag.apps[in.AppId]; !ok {
+		s.ag.RUnlock()
 		return nil, errors.New(fmt.Sprintf("App %s does not exist", in.AppId))
 	}
+	s.ag.RUnlock()
 
 	grpclog.Printf("GetProcesses of app %s", in.AppId)
 

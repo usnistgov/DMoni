@@ -41,14 +41,20 @@ func (s *masterServer) Run() {
 func (s *masterServer) SayHi(ctx context.Context, ni *cPb.NodeInfo) (*cPb.NodeInfo, error) {
 	if _, present := s.mng.agents[ni.Id]; !present {
 		// Create a new agent
-		s.mng.agents[ni.Id] = &common.Node{Id: ni.Id}
+		s.mng.agents[ni.Id] = &common.Node{
+			Id:   ni.Id,
+			Ip:   ni.Ip,
+			Port: ni.Port,
+		}
 		grpclog.Printf("New agent %s %s:%d", ni.Id, ni.Ip, ni.Port)
 	}
 
+	grpclog.Printf("SayHi from %s", ni.Id)
+
 	// Update agent's node info
 	n := s.mng.agents[ni.Id]
-	n.Ip = ni.Ip
-	n.Port = ni.Port
+	//n.Ip = ni.Ip
+	//n.Port = ni.Port
 	n.Heartbeat = ni.Heartbeat
 	n.Timestamp = time.Now()
 
