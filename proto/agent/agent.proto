@@ -22,8 +22,15 @@ message AppInfo {
     string Id = 1;
     // Framework used
     repeated string Frameworks = 2;
+    // The JobIds given by corresponding frameworks
+    repeated string JobIds = 3;
     // Process pattern used to match processes
-    string Pattern = 3;
+    string Pattern = 4;
+	// Pid of the application's main process.
+    // If it's set, then the process on the same node as
+    // the target agent, otherwise not.
+    int32 Pid = 5;
+    // 
 }
 
 message Process {
@@ -44,7 +51,9 @@ message ProcList {
 }
 
 // Reply message of Register()
+// 
 message RegReply {
+    
 }
 
 // Request message of Deregister()

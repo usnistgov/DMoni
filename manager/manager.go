@@ -1,10 +1,19 @@
 package manager
 
 import (
+	"errors"
+	"fmt"
+	"log"
+	"strings"
 	"sync"
 	"time"
 
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/grpclog"
+
 	"github.com/lizhongz/dmoni/common"
+	agPb "github.com/lizhongz/dmoni/proto/agent"
 )
 
 type appMap struct {
@@ -107,4 +116,75 @@ func (m *Manager) Run() {
 
 		m.deregister(app.Id)
 	*/
+}
+
+// deregister an application
+func (m *Manager) deregister(ctx context.Context, appId string) error {
+	m.apps.RLock()
+	if _, ok := m.apps.m[appId]; !ok {
+		m.apps.RUnlock()
+		return errors.New(fmt.Sprintf("App %s does not exist", appId))
+	}
+	m.apps.RUnlock()
+	log.Printf("Deregister app %s", appId)
+
+	// Deregister the app with all agents
+	m.agents.RLock()
+	var wg sync.WaitGroup
+	wg.Add(len(m.agents.m))
+	for _, ag := range m.agents.m {
+		// Create a grpc client to an agent
+		go func(ag *common.Node) {
+			defer wg.Done()
+			// Create an agent client
+			client, closeConn, err := getAgentClient(ag.Ip, ag.Port)
+			if err != nil {
+				log.Printf("Failed getAgentClient(): %v", err)
+				return
+			}
+			defer closeConn()
+
+			// Degregister the app on the agent
+			//grpclog.Printf("Deregister app %s on with agent %s", in.Id, ag.Id)
+			_, err = client.Deregister(ctx, &agPb.DeregRequest{AppId: appId})
+			if err != nil {
+				grpclog.Printf("%v.Deregister(_) = _, %v", client, err)
+				return
+			}
+		}(ag)
+	}
+	m.agents.RUnlock()
+	wg.Wait()
+
+	m.apps.Lock()
+	delete(m.apps.m, appId)
+	m.apps.Unlock()
+	return nil
+}
+
+// findAgent returns node corresponding to a given ip address
+func (m *Manager) findNode(ip string) *common.Node {
+	m.agents.RLock()
+	defer m.agents.RUnlock()
+	for _, ag := range m.agents.m {
+		if strings.Compare(ag.Ip, ip) == 0 {
+			return ag
+		}
+	}
+	return nil
+}
+
+// getAgentClient returns a given agent's client
+func getAgentClient(ip string, port int32) (agPb.MonitorProcsClient, func() error, error) {
+	//TODO(lizhong): Reuse connections to agents
+
+	// Create a grpc client to an agent
+	var opts []grpc.DialOption
+	opts = append(opts, grpc.WithInsecure())
+	conn, err := grpc.Dial(fmt.Sprintf("%s:%d", ip, port), opts...)
+	if err != nil {
+		//grpclog.Printf("Failed to dial agent: %v", err)
+		return nil, nil, err
+	}
+	return agPb.NewMonitorProcsClient(conn), func() error { return conn.Close() }, nil
 }

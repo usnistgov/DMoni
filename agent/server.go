@@ -41,17 +41,19 @@ func (s *agentServer) Register(ctx context.Context, in *pb.AppInfo) (*pb.RegRepl
 	// check if already registered
 	if _, ok := s.ag.apps[in.Id]; ok {
 		s.ag.RUnlock()
-		return &pb.RegReply{}, errors.New(fmt.Sprintf("App %s already registered", in.Id))
+		return &pb.RegReply{}, nil
 	}
 	s.ag.RUnlock()
 
-	grpclog.Printf("Register app %s", in.Id)
+	//grpclog.Printf("Register app %s", in.Id)
+	grpclog.Printf("Register app %s, entry pid %d", in.Id, in.Pid)
 
 	app := &common.App{
 		Id:         in.Id,
-		Frameworks: make([]string, len(in.Frameworks)),
+		Frameworks: in.Frameworks,
+		JobIds:     in.JobIds,
+		EntryPid:   in.Pid,
 	}
-	copy(app.Frameworks, in.Frameworks)
 	s.ag.Lock()
 	s.ag.apps[app.Id] = app
 	s.ag.appProcs[app.Id] = make([]common.Process, 0)

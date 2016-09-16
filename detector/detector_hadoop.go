@@ -28,7 +28,7 @@ var hadoopAppProcMap = map[string]string{
 
 var hadoopProcPrefix = "org.apache.hadoop"
 
-func (d HadoopDetector) Detect(appId string) ([]common.Process, error) {
+func (d HadoopDetector) Detect(jobId string) ([]common.Process, error) {
 	// Obtain all java processes
 	procs, err := cmd_jps()
 	if err != nil {
@@ -54,7 +54,7 @@ func (d HadoopDetector) Detect(appId string) ([]common.Process, error) {
 			valid = true
 		} else if _, ok := hadoopAppProcMap[sn]; ok {
 			// Application process
-			if strings.Contains(proc.FullName, appId) {
+			if strings.Contains(proc.FullName, jobId) {
 				valid = true
 			}
 		} else {

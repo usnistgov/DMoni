@@ -15,7 +15,7 @@ import (
 
 	"github.com/lizhongz/dmoni/common"
 	"github.com/lizhongz/dmoni/detector"
-	pb "github.com/lizhongz/dmoni/proto/cluster"
+	pb "github.com/lizhongz/dmoni/proto/manager"
 )
 
 var (
@@ -85,16 +85,16 @@ func (ag *Agent) Run() {
 // Monitoring all applications
 func (ag *Agent) Monitor() {
 	for {
-		// TODO(lizhong): debug
-		//time.Sleep(10 * time.Second)
-		//continue
-		//grpclog.Printf("monitoring")
-
 		for _, app := range ag.apps {
-			// Detect all the running processes for each framework of this app
+			log.Printf("Monitoring app %s", app.Id)
 			procs := make([]common.Process, 0)
-			for _, fw := range app.Frameworks {
-				fps, err := ag.detectors[fw].Detect(app.Id)
+			if app.EntryPid != 0 {
+				procs = append(procs, common.Process{Pid: app.EntryPid})
+			}
+
+			// Detect all the running processes for each framework of this app
+			for i, fw := range app.Frameworks {
+				fps, err := ag.detectors[fw].Detect(app.JobIds[i])
 				if err != nil {
 					log.Printf("Failed to detect application' %s processes. Error: %s",
 						app.Id, err)
@@ -115,10 +115,17 @@ func (ag *Agent) Monitor() {
 				err := cmd.Run()
 				if err != nil {
 					log.Print("Failed to get process snapshot: %v", err)
+					if app.EntryPid != 0 && p.Pid == app.EntryPid {
+						// Notify The application is finished or the entry
+						// process does not exist.
+						ag.notifyDone(app.Id)
+
+					}
+					continue
 				}
 				//TODO(lizhong): Storing process info
-				log.Printf("%s %d %s %s\n",
-					app.Id, p.Pid, p.ShortName, p.FullName)
+				//log.Printf("Monitoring: %s %d %s %s\n",
+				//  app.Id, p.Pid, p.ShortName, p.FullName)
 			}
 		}
 
@@ -144,7 +151,7 @@ func (ag *Agent) cast() {
 		return
 	}
 	defer conn.Close()
-	client := pb.NewMembershipClient(conn)
+	client := pb.NewManagerClient(conn)
 
 	for {
 		// Say Hi to manager
@@ -170,5 +177,33 @@ func (ag *Agent) cast() {
 		ag.manager.Heartbeat = ma.Heartbeat
 
 		time.Sleep(HbInterval)
+	}
+}
+
+// nitifyDone send an app's Id to mananger and tell him that
+// an applicaiton is finished.
+func (ag *Agent) notifyDone(appId string) {
+	// Create a grpc connection
+	var opts []grpc.DialOption
+	opts = append(opts, grpc.WithInsecure())
+	conn, err := grpc.Dial(fmt.Sprintf(
+		"%s:%d", ag.manager.Ip, ag.manager.Port), opts...)
+	if err != nil {
+		grpclog.Printf("Failed to dial manager: %v", err)
+		return
+	}
+	defer conn.Close()
+	client := pb.NewManagerClient(conn)
+
+	//TODO(lizhong): if failed to notify mananger, it should be
+	//able to retry later.
+
+	log.Printf("Notify mananger app %s is done", appId)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+	defer cancel()
+	_, err = client.NotifyDone(ctx, &pb.AppIndex{Id: appId})
+	if err != nil {
+		grpclog.Printf("Failed to notify mananger that app %s was done", appId)
+		return
 	}
 }

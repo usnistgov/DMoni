@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+package app;
+
+
+// Interfaces exported by manager to users for measuring
+// an application's performance metrics.
+service AppGauge {
+    // Register an application
+    rpc Register(AppDesc) returns (AppIndex) {}
+    // Deregister an app
+    rpc Deregister(AppIndex) returns (DeregReply) {}
+    // Get the running status of an app
+    rpc GetStatus(AppIndex) returns (AppStatus) {}
+    // Get all the processes of an app
+    rpc GetProcesses(AppIndex) returns (AppProcs) {}
+
+    // Test
+    rpc Test(TRequest) returns (TReply) {}
+}
+
+// Application description used to register an app
+message AppDesc {
+    // Entry Process id
+    int32 EntryPid = 1;
+    // Entry node IP address
+    string EntryNode = 2;
+    // Frameworks used by the application
+    repeated string Frameworks = 3;
+    // The JobIds given by corresponding frameworks
+    repeated string JobIds = 4;
+}
+
+// Application index
+message AppIndex {
+    string Id = 1;
+}
+
+// Deregister reply
+message DeregReply {}
+
+// Application status
+message AppStatus {
+    // Command used to execute the application
+    string Cmd = 1;
+    // Status: running, finished
+    string Status = 2;
+    // Start time of the application
+    google.protobuf.Timestamp StartTime = 3;
+    // Execution time until now
+    google.protobuf.Duration ExecTime  = 4;
+}
+
+message Process {
+    // Process's operating system pid
+    int32 Pid = 1;
+    // Process name
+    string Name = 2;
+    // Command line to run the process
+    string Cmd = 3;
+}
+
+// Process list
+message ProcList {
+    repeated Process Procs = 1;
+}
+
+// Application's processes, organized by nodes
+message AppProcs {
+    // (key, value) = (node, process list)
+    map<string, ProcList> NodeProcs = 1;
+}
+
+message TRequest {}
+message TReply {}

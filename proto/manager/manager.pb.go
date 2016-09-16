@@ -9,23 +9,15 @@ It is generated from these files:
 	manager.proto
 
 It has these top-level messages:
-	AppDesc
+	NodeInfo
 	AppIndex
-	DeregReply
-	AppStatus
-	Process
-	ProcList
-	AppProcs
-	TRequest
-	TReply
+	NDReply
 */
 package manager
 
 import proto "github.com/golang/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import google_protobuf "github.com/golang/protobuf/ptypes/timestamp"
-import google_protobuf1 "github.com/golang/protobuf/ptypes/duration"
 
 import (
 	context "golang.org/x/net/context"
@@ -43,22 +35,24 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
 
-// Application description used to register an app
-type AppDesc struct {
-	// Entry Process id
-	EntryPid int32 `protobuf:"varint,1,opt,name=EntryPid,json=entryPid" json:"EntryPid,omitempty"`
-	// Entry node IP address
-	EntryNode string `protobuf:"bytes,2,opt,name=EntryNode,json=entryNode" json:"EntryNode,omitempty"`
-	// Frameworks used by the application
-	Frameworks []string `protobuf:"bytes,3,rep,name=Frameworks,json=frameworks" json:"Frameworks,omitempty"`
-	// The JobIds given by corresponding frameworks
-	JobIds []string `protobuf:"bytes,4,rep,name=JobIds,json=jobIds" json:"JobIds,omitempty"`
+// Cluster node inforamtion.
+//
+// Both manager and agents are treated as a node.
+type NodeInfo struct {
+	// Id of the node
+	Id string `protobuf:"bytes,1,opt,name=Id,json=id" json:"Id,omitempty"`
+	// IP address
+	Ip string `protobuf:"bytes,2,opt,name=Ip,json=ip" json:"Ip,omitempty"`
+	// IP address port
+	Port int32 `protobuf:"varint,3,opt,name=Port,json=port" json:"Port,omitempty"`
+	// The node's heartbeat value
+	Heartbeat int32 `protobuf:"varint,4,opt,name=Heartbeat,json=heartbeat" json:"Heartbeat,omitempty"`
 }
 
-func (m *AppDesc) Reset()                    { *m = AppDesc{} }
-func (m *AppDesc) String() string            { return proto.CompactTextString(m) }
-func (*AppDesc) ProtoMessage()               {}
-func (*AppDesc) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{0} }
+func (m *NodeInfo) Reset()                    { *m = NodeInfo{} }
+func (m *NodeInfo) String() string            { return proto.CompactTextString(m) }
+func (*NodeInfo) ProtoMessage()               {}
+func (*NodeInfo) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{0} }
 
 // Application index
 type AppIndex struct {
@@ -70,121 +64,19 @@ func (m *AppIndex) String() string            { return proto.CompactTextString(m
 func (*AppIndex) ProtoMessage()               {}
 func (*AppIndex) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{1} }
 
-// Deregister reply
-type DeregReply struct {
+// NotifyDone's reply message
+type NDReply struct {
 }
 
-func (m *DeregReply) Reset()                    { *m = DeregReply{} }
-func (m *DeregReply) String() string            { return proto.CompactTextString(m) }
-func (*DeregReply) ProtoMessage()               {}
-func (*DeregReply) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{2} }
-
-// Application status
-type AppStatus struct {
-	// Command used to execute the application
-	Cmd string `protobuf:"bytes,1,opt,name=Cmd,json=cmd" json:"Cmd,omitempty"`
-	// Status: running, finished
-	Status string `protobuf:"bytes,2,opt,name=Status,json=status" json:"Status,omitempty"`
-	// Start time of the application
-	StartTime *google_protobuf.Timestamp `protobuf:"bytes,3,opt,name=StartTime,json=startTime" json:"StartTime,omitempty"`
-	// Execution time until now
-	ExecTime *google_protobuf1.Duration `protobuf:"bytes,4,opt,name=ExecTime,json=execTime" json:"ExecTime,omitempty"`
-}
-
-func (m *AppStatus) Reset()                    { *m = AppStatus{} }
-func (m *AppStatus) String() string            { return proto.CompactTextString(m) }
-func (*AppStatus) ProtoMessage()               {}
-func (*AppStatus) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{3} }
-
-func (m *AppStatus) GetStartTime() *google_protobuf.Timestamp {
-	if m != nil {
-		return m.StartTime
-	}
-	return nil
-}
-
-func (m *AppStatus) GetExecTime() *google_protobuf1.Duration {
-	if m != nil {
-		return m.ExecTime
-	}
-	return nil
-}
-
-type Process struct {
-	// Process's operating system pid
-	Pid int32 `protobuf:"varint,1,opt,name=Pid,json=pid" json:"Pid,omitempty"`
-	// Process name
-	Name string `protobuf:"bytes,2,opt,name=Name,json=name" json:"Name,omitempty"`
-	// Command line to run the process
-	Cmd string `protobuf:"bytes,3,opt,name=Cmd,json=cmd" json:"Cmd,omitempty"`
-}
-
-func (m *Process) Reset()                    { *m = Process{} }
-func (m *Process) String() string            { return proto.CompactTextString(m) }
-func (*Process) ProtoMessage()               {}
-func (*Process) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{4} }
-
-// Process list
-type ProcList struct {
-	Procs []*Process `protobuf:"bytes,1,rep,name=Procs,json=procs" json:"Procs,omitempty"`
-}
-
-func (m *ProcList) Reset()                    { *m = ProcList{} }
-func (m *ProcList) String() string            { return proto.CompactTextString(m) }
-func (*ProcList) ProtoMessage()               {}
-func (*ProcList) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{5} }
-
-func (m *ProcList) GetProcs() []*Process {
-	if m != nil {
-		return m.Procs
-	}
-	return nil
-}
-
-// Application's processes, organized by nodes
-type AppProcs struct {
-	// (key, value) = (node, process list)
-	NodeProcs map[string]*ProcList `protobuf:"bytes,1,rep,name=NodeProcs,json=nodeProcs" json:"NodeProcs,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-}
-
-func (m *AppProcs) Reset()                    { *m = AppProcs{} }
-func (m *AppProcs) String() string            { return proto.CompactTextString(m) }
-func (*AppProcs) ProtoMessage()               {}
-func (*AppProcs) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{6} }
-
-func (m *AppProcs) GetNodeProcs() map[string]*ProcList {
-	if m != nil {
-		return m.NodeProcs
-	}
-	return nil
-}
-
-type TRequest struct {
-}
-
-func (m *TRequest) Reset()                    { *m = TRequest{} }
-func (m *TRequest) String() string            { return proto.CompactTextString(m) }
-func (*TRequest) ProtoMessage()               {}
-func (*TRequest) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{7} }
-
-type TReply struct {
-}
-
-func (m *TReply) Reset()                    { *m = TReply{} }
-func (m *TReply) String() string            { return proto.CompactTextString(m) }
-func (*TReply) ProtoMessage()               {}
-func (*TReply) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{8} }
+func (m *NDReply) Reset()                    { *m = NDReply{} }
+func (m *NDReply) String() string            { return proto.CompactTextString(m) }
+func (*NDReply) ProtoMessage()               {}
+func (*NDReply) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{2} }
 
 func init() {
-	proto.RegisterType((*AppDesc)(nil), "manager.AppDesc")
+	proto.RegisterType((*NodeInfo)(nil), "manager.NodeInfo")
 	proto.RegisterType((*AppIndex)(nil), "manager.AppIndex")
-	proto.RegisterType((*DeregReply)(nil), "manager.DeregReply")
-	proto.RegisterType((*AppStatus)(nil), "manager.AppStatus")
-	proto.RegisterType((*Process)(nil), "manager.Process")
-	proto.RegisterType((*ProcList)(nil), "manager.ProcList")
-	proto.RegisterType((*AppProcs)(nil), "manager.AppProcs")
-	proto.RegisterType((*TRequest)(nil), "manager.TRequest")
-	proto.RegisterType((*TReply)(nil), "manager.TReply")
+	proto.RegisterType((*NDReply)(nil), "manager.NDReply")
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -195,206 +87,105 @@ var _ grpc.ClientConn
 // is compatible with the grpc package it is being compiled against.
 const _ = grpc.SupportPackageIsVersion3
 
-// Client API for AppGauge service
+// Client API for Manager service
 
-type AppGaugeClient interface {
-	// Register an application
-	Register(ctx context.Context, in *AppDesc, opts ...grpc.CallOption) (*AppIndex, error)
-	// Deregister an app
-	Deregister(ctx context.Context, in *AppIndex, opts ...grpc.CallOption) (*DeregReply, error)
-	// Get the running status of an app
-	GetStatus(ctx context.Context, in *AppIndex, opts ...grpc.CallOption) (*AppStatus, error)
-	// Get all the processes of an app
-	GetProcesses(ctx context.Context, in *AppIndex, opts ...grpc.CallOption) (*AppProcs, error)
-	// Test
-	Test(ctx context.Context, in *TRequest, opts ...grpc.CallOption) (*TReply, error)
+type ManagerClient interface {
+	// Agent pushes its node info to manager, and master responds
+	// with its own node info.
+	SayHi(ctx context.Context, in *NodeInfo, opts ...grpc.CallOption) (*NodeInfo, error)
+	// Agent notifies the manager when an application is finished
+	// or the entry/main process does not exists.
+	NotifyDone(ctx context.Context, in *AppIndex, opts ...grpc.CallOption) (*NDReply, error)
 }
 
-type appGaugeClient struct {
+type managerClient struct {
 	cc *grpc.ClientConn
 }
 
-func NewAppGaugeClient(cc *grpc.ClientConn) AppGaugeClient {
-	return &appGaugeClient{cc}
+func NewManagerClient(cc *grpc.ClientConn) ManagerClient {
+	return &managerClient{cc}
 }
 
-func (c *appGaugeClient) Register(ctx context.Context, in *AppDesc, opts ...grpc.CallOption) (*AppIndex, error) {
-	out := new(AppIndex)
-	err := grpc.Invoke(ctx, "/manager.AppGauge/Register", in, out, c.cc, opts...)
+func (c *managerClient) SayHi(ctx context.Context, in *NodeInfo, opts ...grpc.CallOption) (*NodeInfo, error) {
+	out := new(NodeInfo)
+	err := grpc.Invoke(ctx, "/manager.Manager/SayHi", in, out, c.cc, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *appGaugeClient) Deregister(ctx context.Context, in *AppIndex, opts ...grpc.CallOption) (*DeregReply, error) {
-	out := new(DeregReply)
-	err := grpc.Invoke(ctx, "/manager.AppGauge/Deregister", in, out, c.cc, opts...)
+func (c *managerClient) NotifyDone(ctx context.Context, in *AppIndex, opts ...grpc.CallOption) (*NDReply, error) {
+	out := new(NDReply)
+	err := grpc.Invoke(ctx, "/manager.Manager/NotifyDone", in, out, c.cc, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *appGaugeClient) GetStatus(ctx context.Context, in *AppIndex, opts ...grpc.CallOption) (*AppStatus, error) {
-	out := new(AppStatus)
-	err := grpc.Invoke(ctx, "/manager.AppGauge/GetStatus", in, out, c.cc, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
+// Server API for Manager service
+
+type ManagerServer interface {
+	// Agent pushes its node info to manager, and master responds
+	// with its own node info.
+	SayHi(context.Context, *NodeInfo) (*NodeInfo, error)
+	// Agent notifies the manager when an application is finished
+	// or the entry/main process does not exists.
+	NotifyDone(context.Context, *AppIndex) (*NDReply, error)
 }
 
-func (c *appGaugeClient) GetProcesses(ctx context.Context, in *AppIndex, opts ...grpc.CallOption) (*AppProcs, error) {
-	out := new(AppProcs)
-	err := grpc.Invoke(ctx, "/manager.AppGauge/GetProcesses", in, out, c.cc, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
+func RegisterManagerServer(s *grpc.Server, srv ManagerServer) {
+	s.RegisterService(&_Manager_serviceDesc, srv)
 }
 
-func (c *appGaugeClient) Test(ctx context.Context, in *TRequest, opts ...grpc.CallOption) (*TReply, error) {
-	out := new(TReply)
-	err := grpc.Invoke(ctx, "/manager.AppGauge/Test", in, out, c.cc, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// Server API for AppGauge service
-
-type AppGaugeServer interface {
-	// Register an application
-	Register(context.Context, *AppDesc) (*AppIndex, error)
-	// Deregister an app
-	Deregister(context.Context, *AppIndex) (*DeregReply, error)
-	// Get the running status of an app
-	GetStatus(context.Context, *AppIndex) (*AppStatus, error)
-	// Get all the processes of an app
-	GetProcesses(context.Context, *AppIndex) (*AppProcs, error)
-	// Test
-	Test(context.Context, *TRequest) (*TReply, error)
-}
-
-func RegisterAppGaugeServer(s *grpc.Server, srv AppGaugeServer) {
-	s.RegisterService(&_AppGauge_serviceDesc, srv)
-}
-
-func _AppGauge_Register_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AppDesc)
+func _Manager_SayHi_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(NodeInfo)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AppGaugeServer).Register(ctx, in)
+		return srv.(ManagerServer).SayHi(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/manager.AppGauge/Register",
+		FullMethod: "/manager.Manager/SayHi",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AppGaugeServer).Register(ctx, req.(*AppDesc))
+		return srv.(ManagerServer).SayHi(ctx, req.(*NodeInfo))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AppGauge_Deregister_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Manager_NotifyDone_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AppIndex)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AppGaugeServer).Deregister(ctx, in)
+		return srv.(ManagerServer).NotifyDone(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/manager.AppGauge/Deregister",
+		FullMethod: "/manager.Manager/NotifyDone",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AppGaugeServer).Deregister(ctx, req.(*AppIndex))
+		return srv.(ManagerServer).NotifyDone(ctx, req.(*AppIndex))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AppGauge_GetStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AppIndex)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AppGaugeServer).GetStatus(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/manager.AppGauge/GetStatus",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AppGaugeServer).GetStatus(ctx, req.(*AppIndex))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _AppGauge_GetProcesses_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AppIndex)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AppGaugeServer).GetProcesses(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/manager.AppGauge/GetProcesses",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AppGaugeServer).GetProcesses(ctx, req.(*AppIndex))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _AppGauge_Test_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(TRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AppGaugeServer).Test(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/manager.AppGauge/Test",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AppGaugeServer).Test(ctx, req.(*TRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-var _AppGauge_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "manager.AppGauge",
-	HandlerType: (*AppGaugeServer)(nil),
+var _Manager_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "manager.Manager",
+	HandlerType: (*ManagerServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "Register",
-			Handler:    _AppGauge_Register_Handler,
+			MethodName: "SayHi",
+			Handler:    _Manager_SayHi_Handler,
 		},
 		{
-			MethodName: "Deregister",
-			Handler:    _AppGauge_Deregister_Handler,
-		},
-		{
-			MethodName: "GetStatus",
-			Handler:    _AppGauge_GetStatus_Handler,
-		},
-		{
-			MethodName: "GetProcesses",
-			Handler:    _AppGauge_GetProcesses_Handler,
-		},
-		{
-			MethodName: "Test",
-			Handler:    _AppGauge_Test_Handler,
+			MethodName: "NotifyDone",
+			Handler:    _Manager_NotifyDone_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -404,39 +195,18 @@ var _AppGauge_serviceDesc = grpc.ServiceDesc{
 func init() { proto.RegisterFile("manager.proto", fileDescriptor0) }
 
 var fileDescriptor0 = []byte{
-	// 535 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0x6c, 0x52, 0x4d, 0x6f, 0xd3, 0x40,
-	0x14, 0x8c, 0xe3, 0x7c, 0xd8, 0x2f, 0xa5, 0x24, 0x8b, 0x84, 0x8c, 0x85, 0x8a, 0xe5, 0x03, 0xe4,
-	0x80, 0x5c, 0x11, 0x3e, 0x54, 0x71, 0x40, 0x8a, 0x48, 0x89, 0x82, 0x50, 0xa9, 0xb6, 0xf9, 0x03,
-	0x9b, 0xf8, 0xd5, 0x32, 0x89, 0xed, 0xc5, 0xbb, 0x86, 0x46, 0xfc, 0x0a, 0xce, 0xdc, 0xf9, 0x9d,
-	0xc8, 0x6b, 0x6f, 0x70, 0x9b, 0xde, 0xbc, 0x6f, 0x66, 0xfc, 0x66, 0x67, 0x07, 0x1e, 0x24, 0x2c,
-	0x65, 0x11, 0xe6, 0x01, 0xcf, 0x33, 0x99, 0x91, 0x7e, 0x7d, 0x74, 0x9f, 0x45, 0x59, 0x16, 0x6d,
-	0xf1, 0x54, 0x8d, 0x57, 0xc5, 0xf5, 0xa9, 0x8c, 0x13, 0x14, 0x92, 0x25, 0xbc, 0x62, 0xba, 0x27,
-	0x77, 0x09, 0x61, 0x91, 0x33, 0x19, 0x67, 0x69, 0x85, 0xfb, 0xbf, 0xa0, 0x3f, 0xe5, 0x7c, 0x86,
-	0x62, 0x4d, 0x5c, 0xb0, 0xce, 0x53, 0x99, 0xef, 0x2e, 0xe3, 0xd0, 0x31, 0x3c, 0x63, 0xdc, 0xa5,
-	0x16, 0xd6, 0x67, 0xf2, 0x14, 0x6c, 0x85, 0x5d, 0x64, 0x21, 0x3a, 0x6d, 0xcf, 0x18, 0xdb, 0xd4,
-	0x46, 0x3d, 0x20, 0x27, 0x00, 0x9f, 0x72, 0x96, 0xe0, 0xcf, 0x2c, 0xdf, 0x08, 0xc7, 0xf4, 0xcc,
-	0xb1, 0x4d, 0xe1, 0x7a, 0x3f, 0x21, 0x8f, 0xa1, 0xf7, 0x39, 0x5b, 0x2d, 0x42, 0xe1, 0x74, 0x14,
-	0xd6, 0xfb, 0xa6, 0x4e, 0xbe, 0x0b, 0xd6, 0x94, 0xf3, 0x45, 0x1a, 0xe2, 0x0d, 0x39, 0x86, 0xf6,
-	0xa2, 0xda, 0x6b, 0xd3, 0x76, 0x1c, 0xfa, 0x47, 0x00, 0x33, 0xcc, 0x31, 0xa2, 0xc8, 0xb7, 0x3b,
-	0xff, 0xaf, 0x01, 0xf6, 0x94, 0xf3, 0x2b, 0xc9, 0x64, 0x21, 0xc8, 0x10, 0xcc, 0x8f, 0x89, 0x26,
-	0x9b, 0xeb, 0x24, 0x2c, 0x37, 0x54, 0x58, 0x6d, 0xae, 0x27, 0x2a, 0xe6, 0x19, 0xd8, 0x57, 0x92,
-	0xe5, 0x72, 0x19, 0x27, 0xe8, 0x98, 0x9e, 0x31, 0x1e, 0x4c, 0xdc, 0xa0, 0x8a, 0x24, 0xd0, 0x91,
-	0x04, 0x4b, 0x9d, 0x19, 0xb5, 0x85, 0x26, 0x93, 0xb7, 0x60, 0x9d, 0xdf, 0xe0, 0x5a, 0x09, 0x3b,
-	0x4a, 0xf8, 0xe4, 0x40, 0x38, 0xab, 0xb3, 0xa4, 0x16, 0xd6, 0x54, 0x7f, 0x0a, 0xfd, 0xcb, 0x3c,
-	0x5b, 0xa3, 0x50, 0x2e, 0xff, 0x47, 0x69, 0xf2, 0x38, 0x24, 0x04, 0x3a, 0x17, 0x2c, 0xd1, 0x01,
-	0x76, 0x52, 0x96, 0xa0, 0xbe, 0x8b, 0xb9, 0xbf, 0x8b, 0x3f, 0x01, 0xab, 0xfc, 0xc5, 0x97, 0x58,
-	0x48, 0xf2, 0x1c, 0xba, 0xe5, 0xb7, 0x70, 0x0c, 0xcf, 0x1c, 0x0f, 0x26, 0xc3, 0x40, 0xf7, 0xa0,
-	0x5e, 0x42, 0xbb, 0xbc, 0x84, 0xfd, 0x3f, 0x86, 0x8a, 0x52, 0x71, 0xc9, 0x07, 0xb0, 0xcb, 0x67,
-	0x69, 0x0a, 0xbd, 0xbd, 0x50, 0xb3, 0x82, 0x3d, 0x45, 0x3d, 0x2c, 0xb5, 0x53, 0x7d, 0x76, 0xbf,
-	0xc2, 0xf1, 0x6d, 0xb0, 0x34, 0xb9, 0xc1, 0x9d, 0x0e, 0x7c, 0x83, 0x3b, 0xf2, 0x02, 0xba, 0x3f,
-	0xd8, 0xb6, 0xa8, 0xee, 0x32, 0x98, 0x8c, 0x6e, 0x19, 0x2b, 0xad, 0xd3, 0x0a, 0x7f, 0xdf, 0x3e,
-	0x33, 0x7c, 0x00, 0x6b, 0x49, 0xf1, 0x7b, 0x81, 0x42, 0xfa, 0x16, 0xf4, 0x96, 0xea, 0x4d, 0x27,
-	0xbf, 0xdb, 0xca, 0xf3, 0x9c, 0x15, 0x11, 0x92, 0x57, 0x60, 0x51, 0x8c, 0x62, 0x21, 0x31, 0x27,
-	0xc3, 0xa6, 0xd9, 0xb2, 0x9a, 0xee, 0xa8, 0x39, 0x51, 0x7d, 0xf1, 0x5b, 0xe4, 0x5d, 0xdd, 0x90,
-	0x4a, 0x74, 0x48, 0x71, 0x1f, 0xed, 0x47, 0x8d, 0x26, 0xb5, 0xc8, 0x1b, 0xb0, 0xe7, 0x28, 0xeb,
-	0x2a, 0xdd, 0x23, 0x23, 0xcd, 0x51, 0x45, 0x53, 0xdb, 0x8e, 0xe6, 0x28, 0xeb, 0xd8, 0xf1, 0x5e,
-	0xe1, 0xe8, 0x20, 0x64, 0xbf, 0x45, 0x5e, 0x42, 0x67, 0x89, 0x42, 0x36, 0xf8, 0x3a, 0x0a, 0xf7,
-	0x61, 0x73, 0xa4, 0xbc, 0xad, 0x7a, 0xaa, 0x5b, 0xaf, 0xff, 0x05, 0x00, 0x00, 0xff, 0xff, 0x61,
-	0x26, 0x9f, 0x10, 0xf0, 0x03, 0x00, 0x00,
+	// 203 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0x64, 0x90, 0xc1, 0x4b, 0x80, 0x30,
+	0x14, 0xc6, 0xd5, 0x34, 0xdd, 0x83, 0xa2, 0xde, 0x69, 0x48, 0x07, 0xd9, 0xc9, 0x93, 0x41, 0xfe,
+	0x05, 0x81, 0x07, 0x3d, 0x24, 0x61, 0xd7, 0x2e, 0x93, 0xcd, 0x12, 0x6a, 0x6f, 0x8c, 0x1d, 0xf2,
+	0xbf, 0x0f, 0xd4, 0x51, 0xd4, 0xf1, 0xf7, 0x8d, 0x6f, 0xdf, 0x8f, 0x07, 0x57, 0x9f, 0xd2, 0xc8,
+	0x37, 0xed, 0x1a, 0xeb, 0xc8, 0x13, 0xe6, 0x27, 0x8a, 0x57, 0x28, 0x46, 0x52, 0x7a, 0x30, 0x0b,
+	0xe1, 0x35, 0x24, 0x83, 0xe2, 0x71, 0x15, 0xd7, 0x6c, 0x4a, 0x56, 0xb5, 0xb3, 0xe5, 0xc9, 0xc9,
+	0x16, 0x11, 0xd2, 0x67, 0x72, 0x9e, 0x5f, 0x54, 0x71, 0x9d, 0x4d, 0xa9, 0x25, 0xe7, 0xf1, 0x0e,
+	0x58, 0xaf, 0xa5, 0xf3, 0xb3, 0x96, 0x9e, 0xa7, 0xfb, 0x03, 0x7b, 0x0f, 0x81, 0x28, 0xa1, 0x78,
+	0xb4, 0x76, 0x30, 0x4a, 0x7f, 0xfd, 0xfd, 0x5d, 0x30, 0xc8, 0xc7, 0x6e, 0xd2, 0xf6, 0x63, 0x7b,
+	0x20, 0xc8, 0x9f, 0x0e, 0x1f, 0xbc, 0x87, 0xec, 0x45, 0x6e, 0xfd, 0x8a, 0xb7, 0x4d, 0x30, 0x0e,
+	0x7e, 0xe5, 0xff, 0x48, 0x44, 0xd8, 0x02, 0x8c, 0xe4, 0xd7, 0x65, 0xeb, 0xc8, 0xe8, 0x5f, 0xad,
+	0xb0, 0x5b, 0xde, 0xfc, 0xb4, 0x8e, 0x39, 0x11, 0xcd, 0x97, 0xfb, 0x15, 0xda, 0xef, 0x00, 0x00,
+	0x00, 0xff, 0xff, 0xc0, 0x59, 0x44, 0xcb, 0x16, 0x01, 0x00, 0x00,
 }

@@ -24,7 +24,7 @@ var sparkAppProcMap = map[string]string{
 
 var sparkProcPrefix = "org.apache.spark"
 
-func (d SparkDetector) Detect(appId string) ([]common.Process, error) {
+func (d SparkDetector) Detect(jobId string) ([]common.Process, error) {
 	// Obtain all java processes
 	procs, err := cmd_jps()
 	if err != nil {
@@ -50,7 +50,7 @@ func (d SparkDetector) Detect(appId string) ([]common.Process, error) {
 			valid = true
 		} else if _, ok := sparkAppProcMap[sn]; ok {
 			// Application process
-			if strings.Contains(proc.FullName, appId) {
+			if strings.Contains(proc.FullName, jobId) {
 				valid = true
 			}
 		} else {

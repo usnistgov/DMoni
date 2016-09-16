@@ -5,5 +5,5 @@ import (
 )
 
 type Detector interface {
-	Detect(appId string) ([]common.Process, error)
+	Detect(jobId string) ([]common.Process, error)
 }
