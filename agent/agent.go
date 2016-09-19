@@ -118,8 +118,8 @@ func (ag *Agent) Monitor() {
 					if app.EntryPid != 0 && p.Pid == app.EntryPid {
 						// Notify The application is finished or the entry
 						// process does not exist.
-						ag.notifyDone(app.Id)
-
+						go ag.notifyDone(app.Id)
+						break
 					}
 					continue
 				}
