@@ -2,8 +2,10 @@ package agent
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"strconv"
 	"sync"
@@ -19,28 +21,48 @@ import (
 )
 
 var (
-	HbInterval = time.Second * 6 // Heartbeat time interval
+	HbInterval   = time.Second * 6 // Heartbeat time interval
+	MoniInterval = time.Second * 3 // Monitoring time interval
+	// Local directory to store monitored data
+	outDir = "/tmp/dmoni"
 )
 
+// Application info used for monitoring
+type App struct {
+	// Application Id
+	Id string
+	// Frameworks used by this application
+	Frameworks []string
+	// Job Ids in corresponding frameworks
+	JobIds []string
+	// Pid of the application's main process, if it's zero
+	// means the process is not on this node.
+	EntryPid int32
+	// Processes of the app
+	Procs []common.Process
+	// Output file of monitored data
+	ofile string
+}
+
+type AppMap struct {
+	m map[string]*App
+	sync.RWMutex
+}
+
 type Agent struct {
-	// List of monitored applications
-	apps map[string]*common.App
+	// monitored Applications
+	apps *AppMap
 	// Process detectors for different frameworks
 	// (key, value) = (framework, detector)
 	detectors map[string]detector.Detector
-	// Application processes
-	// (key, value) = (app id, process list)
-	appProcs map[string][]common.Process
-
 	// My node info
 	me common.Node
 	// Managero node info
 	manager common.Node
-
 	// Agent server
 	server *agentServer
 
-	sync.RWMutex
+	//sync.RWMutex
 }
 
 type Config struct {
@@ -56,13 +78,12 @@ type Config struct {
 // Create an agent given manager node's address (IP and port)
 func NewAgent(cfg *Config) *Agent {
 	ag := &Agent{
-		apps: make(map[string]*common.App),
+		apps: &AppMap{m: make(map[string]*App)},
 		detectors: map[string]detector.Detector{
 			"hadoop": &detector.HadoopDetector{},
 			"spark":  new(detector.SparkDetector),
 		},
-		appProcs: make(map[string][]common.Process),
-		manager:  common.Node{Ip: cfg.MngIp, Port: cfg.MngPort},
+		manager: common.Node{Ip: cfg.MngIp, Port: cfg.MngPort},
 		me: common.Node{
 			Id: cfg.Id, Ip: cfg.Ip, Port: cfg.Port, Heartbeat: 0},
 	}
@@ -72,6 +93,12 @@ func NewAgent(cfg *Config) *Agent {
 }
 
 func (ag *Agent) Run() {
+	// Check if data output direcotry exists. If not, create one
+	err := os.Mkdir(outDir, 0774)
+	if err != nil && !os.IsExist(err) {
+		log.Fatalf("Failed to create output dir %s: %v", outDir, err)
+	}
+
 	// Start agent's server
 	go ag.server.Run()
 
@@ -85,12 +112,14 @@ func (ag *Agent) Run() {
 // Monitoring all applications
 func (ag *Agent) Monitor() {
 	for {
-		for _, app := range ag.apps {
+		for _, app := range ag.apps.m {
 			log.Printf("Monitoring app %s", app.Id)
 			procs := make([]common.Process, 0)
 			if app.EntryPid != 0 {
 				procs = append(procs, common.Process{Pid: app.EntryPid})
 			}
+
+			//TODO(lizhong): using golang's io Process to monitor the main process
 
 			// Detect all the running processes for each framework of this app
 			for i, fw := range app.Frameworks {
@@ -102,18 +131,22 @@ func (ag *Agent) Monitor() {
 				}
 				procs = append(procs, fps...)
 			}
-			ag.appProcs[app.Id] = procs
+			app.Procs = procs
+
+			f, err := os.OpenFile(app.ofile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
+			if err != nil {
+				log.Printf("Failed to create output file of app %s: %v", app.Id, err)
+			}
+			var buf bytes.Buffer
 
 			// Monitor the app's processes
-			for _, p := range ag.appProcs[app.Id] {
+			for _, p := range app.Procs {
 				//TODO(lizhong): configure the path of monitor.py
 				cmd := exec.Command("python",
 					"/home/lnz5/workspace/snapshot/app/monitor.py",
 					"-n", "1", strconv.Itoa(int(p.Pid)))
-				var out bytes.Buffer
-				cmd.Stdout = &out
-				err := cmd.Run()
-				if err != nil {
+				cmd.Stdout = &buf
+				if err := cmd.Run(); err != nil {
 					log.Print("Failed to get process snapshot: %v", err)
 					if app.EntryPid != 0 && p.Pid == app.EntryPid {
 						// Notify The application is finished or the entry
@@ -123,14 +156,34 @@ func (ag *Agent) Monitor() {
 					}
 					continue
 				}
-				//TODO(lizhong): Storing process info
-				//log.Printf("Monitoring: %s %d %s %s\n",
-				//  app.Id, p.Pid, p.ShortName, p.FullName)
+
+				// Store process's performance data in a local file
+				var data interface{}
+				err = json.Unmarshal(buf.Bytes(), &data)
+				if err != nil {
+					log.Printf("Failed to unmarshal process snapshot %s: %v", buf.Bytes(), err)
+					continue
+				}
+				m := data.(map[string]interface{})
+				m["node"] = ag.me.Ip
+				m["app_id"] = app.Id
+				buf.Reset()
+
+				out, err := json.Marshal(m)
+				if err != nil {
+					log.Printf("Failed to marshal %v: %v", m, err)
+					continue
+				}
+				_, err = f.Write(out)
+				if err != nil {
+					log.Printf("Failed to write file %s: %v", app.ofile, err)
+					continue
+				}
 			}
+			f.Close()
 		}
 
-		//TODO(lizhong): make the interval configable
-		time.Sleep(3 * time.Second)
+		time.Sleep(MoniInterval)
 	}
 }
 
@@ -206,4 +259,24 @@ func (ag *Agent) notifyDone(appId string) {
 		grpclog.Printf("Failed to notify mananger that app %s was done", appId)
 		return
 	}
+}
+
+// storeData reads monitored data of an app, and push them to centraldatabase.
+func (ag *Agent) storeData(app *App) error {
+	f, err := os.Open(app.ofile)
+	defer f.Close()
+	if err != nil {
+		log.Printf("Failed to open file %s: %v", app.ofile, err)
+		return err
+	}
+	dec := json.NewDecoder(f)
+	var m map[string]interface{}
+	for dec.More() {
+		if err := dec.Decode(&m); err != nil {
+			log.Printf("Failed to decode: %v", err)
+			return err
+		}
+		fmt.Printf("%v\n\n", m)
+	}
+	return nil
 }

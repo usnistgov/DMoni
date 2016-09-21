@@ -3,7 +3,9 @@ package agent
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net"
+	"path"
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -37,67 +39,77 @@ func (s *agentServer) Run() {
 
 // Application registration service
 func (s *agentServer) Register(ctx context.Context, in *pb.AppInfo) (*pb.RegReply, error) {
-	s.ag.RLock()
+	apps := s.ag.apps
+	apps.RLock()
 	// check if already registered
-	if _, ok := s.ag.apps[in.Id]; ok {
-		s.ag.RUnlock()
+	if _, ok := apps.m[in.Id]; ok {
+		apps.RUnlock()
 		return &pb.RegReply{}, nil
 	}
-	s.ag.RUnlock()
+	apps.RUnlock()
 
 	//grpclog.Printf("Register app %s", in.Id)
 	grpclog.Printf("Register app %s, entry pid %d", in.Id, in.Pid)
 
-	app := &common.App{
+	app := &App{
 		Id:         in.Id,
 		Frameworks: in.Frameworks,
 		JobIds:     in.JobIds,
 		EntryPid:   in.Pid,
+		Procs:      make([]common.Process, 0),
+		ofile:      path.Join(outDir, in.Id),
 	}
-	s.ag.Lock()
-	s.ag.apps[app.Id] = app
-	s.ag.appProcs[app.Id] = make([]common.Process, 0)
-	s.ag.Unlock()
+	apps.Lock()
+	apps.m[app.Id] = app
+	apps.Unlock()
 
 	return &pb.RegReply{}, nil
 }
 
 // Application deregistration service
 func (s *agentServer) Deregister(ctx context.Context, in *pb.DeregRequest) (*pb.DeregReply, error) {
-	// Check if the application exists
-	s.ag.RLock()
-	if _, ok := s.ag.apps[in.AppId]; !ok {
-		s.ag.RUnlock()
-		return nil, nil
-	}
-	s.ag.RUnlock()
-
 	grpclog.Printf("Deregister app %s", in.AppId)
 
-	s.ag.Lock()
-	delete(s.ag.apps, in.AppId)
-	delete(s.ag.appProcs, in.AppId)
-	s.ag.Unlock()
+	apps := s.ag.apps
+	// Check if the application exists
+	apps.Lock()
+	a, ok := apps.m[in.AppId]
+	if !ok {
+		apps.Unlock()
+		return nil, nil
+	}
+	delete(apps.m, in.AppId)
+	apps.Unlock()
+
+	// Store app's perfromance data
+	go func() {
+		err := s.ag.storeData(a)
+		if err != nil {
+			log.Printf("Failed to store app %s data: %v", a.Id, err)
+		}
+	}()
+
 	return &pb.DeregReply{}, nil
 }
 
 // Obtaining Applications' processes
 func (s *agentServer) GetProcesses(ctx context.Context, in *pb.ProcRequest) (*pb.ProcList, error) {
-	s.ag.RLock()
+	apps := s.ag.apps
+	apps.RLock()
 	// check if application exists
-	if _, ok := s.ag.apps[in.AppId]; !ok {
-		s.ag.RUnlock()
+	a, ok := apps.m[in.AppId]
+	if !ok {
+		apps.RUnlock()
 		return nil, errors.New(fmt.Sprintf("App %s does not exist", in.AppId))
 	}
-	s.ag.RUnlock()
-
+	apps.RUnlock()
 	grpclog.Printf("GetProcesses of app %s", in.AppId)
 
 	// Make a process list and Return it
 	list := &pb.ProcList{
-		Procs: make([]*pb.Process, len(s.ag.appProcs[in.AppId])),
+		Procs: make([]*pb.Process, len(a.Procs)),
 	}
-	for i, p := range s.ag.appProcs[in.AppId] {
+	for i, p := range a.Procs {
 		list.Procs[i] = &pb.Process{
 			Pid:  p.Pid,
 			Name: p.ShortName,
