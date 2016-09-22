@@ -14,6 +14,7 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/grpclog"
+	"gopkg.in/olivere/elastic.v3"
 
 	"github.com/lizhongz/dmoni/common"
 	"github.com/lizhongz/dmoni/detector"
@@ -261,14 +262,40 @@ func (ag *Agent) notifyDone(appId string) {
 	}
 }
 
-// storeData reads monitored data of an app, and push them to centraldatabase.
+// storeData reads monitored data of an app, and push them to central database.
 func (ag *Agent) storeData(app *App) error {
+	// Open the file storing monitored data
 	f, err := os.Open(app.ofile)
 	defer f.Close()
 	if err != nil {
 		log.Printf("Failed to open file %s: %v", app.ofile, err)
 		return err
 	}
+
+	// Create an ElasticSearch client
+	client, err := elastic.NewClient(
+		elastic.SetSniff(false),
+		elastic.SetURL("http://129.6.57.225:9200"))
+	if err != nil {
+		log.Printf("Failed to create ElasticSearch client: %v", err)
+		return err
+	}
+
+	// Check the existence of index; if not create one
+	exist, err := client.IndexExists("dmoni").Do()
+	if err != nil {
+		log.Fatalf("Failed to call IndexExists: %v", err)
+		return err
+	}
+	if !exist {
+		_, err = client.CreateIndex("dmoni").Do()
+		if err != nil {
+			log.Fatalf("Failed to create index: %v", err)
+			return err
+		}
+	}
+
+	// Read, decode and store JSON stream from the file
 	dec := json.NewDecoder(f)
 	var m map[string]interface{}
 	for dec.More() {
@@ -276,7 +303,14 @@ func (ag *Agent) storeData(app *App) error {
 			log.Printf("Failed to decode: %v", err)
 			return err
 		}
-		fmt.Printf("%v\n\n", m)
+
+		_, err = client.Index().
+			Index("dmoni").Type("proc").
+			BodyJson(m).Refresh(true).Do()
+		if err != nil {
+			log.Printf("Failed to store proc doc: %v", err)
+			return err
+		}
 	}
 	return nil
 }
