@@ -41,6 +41,48 @@ func (s *appServer) Run() {
 	grpcServer.Serve(lis)
 }
 
+// Submit an application
+func (s *appServer) Submit(ctx context.Context, in *appPb.SubRequest) (*appPb.AppIndex, error) {
+	// Generate an id for the application
+	id := strings.Join(strings.Split(uuid.NewV4().String(), "-"), "")
+	grpclog.Printf("Launching app %s", id)
+
+	/*
+		_ := &common.App{
+			Id:       id,
+			ExecName: in.ExecName,
+			ExecArgs: in.ExecArgs,
+		}
+	*/
+
+	node := s.mng.findNode(in.Ip)
+	if node == nil {
+		return nil, errors.New(fmt.Sprintf("Node %d does not exist", in.Ip))
+	}
+	client, close, err := getAgentClient(node.Ip, node.Port)
+	if err != nil {
+		log.Printf("Failed to get agent %s's client: %v", node.Id, err)
+		return nil, errors.New(fmt.Sprintf("Failed to connect to %s", in.Ip))
+	}
+	defer close()
+
+	_, err = client.Launch(ctx,
+		&agPb.LchRequest{
+			AppId:    id,
+			ExecName: in.ExecName,
+			ExecArgs: in.ExecArgs,
+		})
+	if err != nil {
+		log.Printf("Failed to launch app: %v", err)
+	}
+	return &appPb.AppIndex{Id: id}, nil
+}
+
+// Kill an application
+func (s *appServer) Kill(ctx context.Context, in *appPb.AppIndex) (*appPb.KillReply, error) {
+	return nil, nil
+}
+
 // Register an application
 func (s *appServer) Register(ctx context.Context, in *appPb.AppDesc) (*appPb.AppIndex, error) {
 
