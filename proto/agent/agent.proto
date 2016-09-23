@@ -4,6 +4,9 @@ package agent;
 
 // Interfaces exported by agent for monitoring applications
 service MonitorProcs {
+    // Launch an application
+    rpc Launch(LchRequest) returns (LchReply) {}
+
     // Manager registers an application, and agent responds
     // with the app's processes' info on the node.
     rpc Register(AppInfo) returns (RegReply) {}
@@ -16,6 +19,17 @@ service MonitorProcs {
     // with the app's processes' info on the node.
     rpc GetProcesses(ProcRequest) returns (ProcList) {}
 }
+
+message LchRequest {
+    // Application's id
+    string AppId = 1;
+    // Executable binary's name
+    string ExecName = 2;
+    // Arguments of execution
+    repeated string ExecArgs = 3;
+}
+
+message LchReply {}
 
 message AppInfo {
     // Application's id
@@ -30,7 +44,6 @@ message AppInfo {
     // If it's set, then the process on the same node as
     // the target agent, otherwise not.
     int32 Pid = 5;
-    // 
 }
 
 message Process {

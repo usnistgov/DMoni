@@ -14,4 +14,9 @@ type App struct {
 	EntryPid int32
 	// Status of the application: running, exited
 	Status string
+
+	// Executable name
+	ExecName string
+	// Execution arguments
+	ExecArgs []string
 }

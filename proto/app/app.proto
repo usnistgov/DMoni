@@ -9,6 +9,10 @@ package app;
 // Interfaces exported by manager to users for measuring
 // an application's performance metrics.
 service AppGauge {
+    // Submit an application
+    rpc Submit(SubRequest) returns (AppIndex) {}
+    // Kill an application
+    rpc Kill(AppIndex) returns (KillReply) {}
     // Register an application
     rpc Register(AppDesc) returns (AppIndex) {}
     // Deregister an app
@@ -21,6 +25,17 @@ service AppGauge {
     // Test
     rpc Test(TRequest) returns (TReply) {}
 }
+
+message SubRequest {
+    // Command to  the app
+    string ExecName = 1;
+    // Command to  the app
+    repeated string ExecArgs = 2;
+    // IP address of the node to launch the app
+    string Ip = 3;
+}
+
+message KillReply {}
 
 // Application description used to register an app
 message AppDesc {

@@ -37,6 +37,15 @@ func (s *agentServer) Run() {
 	grpcServer.Serve(lis)
 }
 
+func (s *agentServer) Launch(ctx context.Context, in *pb.LchRequest) (*pb.LchReply, error) {
+	err := s.ag.launch(in.AppId, in.ExecName, in.ExecArgs...)
+	if err != nil {
+		log.Printf("Failed to launch app %s: %v", in.AppId, err)
+		return nil, err
+	}
+	return &pb.LchReply{}, nil
+}
+
 // Application registration service
 func (s *agentServer) Register(ctx context.Context, in *pb.AppInfo) (*pb.RegReply, error) {
 	apps := s.ag.apps

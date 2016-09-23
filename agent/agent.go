@@ -38,11 +38,17 @@ type App struct {
 	JobIds []string
 	// Pid of the application's main process, if it's zero
 	// means the process is not on this node.
+	// TODO: use int instead of int32
 	EntryPid int32
 	// Processes of the app
 	Procs []common.Process
 	// Output file of monitored data
 	ofile string
+
+	// Executable name
+	exe string
+	// arguments for running the app
+	args []string
 }
 
 type AppMap struct {
@@ -94,6 +100,7 @@ func NewAgent(cfg *Config) *Agent {
 }
 
 func (ag *Agent) Run() {
+
 	// Check if data output direcotry exists. If not, create one
 	err := os.Mkdir(outDir, 0774)
 	if err != nil && !os.IsExist(err) {
@@ -108,6 +115,45 @@ func (ag *Agent) Run() {
 
 	// Start monitoring
 	ag.Monitor()
+}
+
+func (ag *Agent) launch(appId string, exe string, arg ...string) error {
+	// Run application as a child process
+	cmd := exec.Command(exe, arg...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err := cmd.Start()
+	if err != nil {
+		log.Printf("Failed to execute %s %v: %v", exe, arg, err)
+		return err
+	}
+
+	app := &App{
+		Id:       appId,
+		exe:      exe,
+		args:     arg,
+		EntryPid: int32(cmd.Process.Pid),
+	}
+	ag.apps.Lock()
+	//ag.apps.m[app.Id] = app
+	ag.apps.Unlock()
+
+	go func() {
+		err = cmd.Wait()
+		if err != nil {
+			log.Printf("App %s exits with error: %v", app.Id, err)
+		} else {
+			log.Printf("App %s exits", app.Id)
+		}
+
+		// TODO: Notify manager
+
+		ag.apps.Lock()
+		//delete(ag.apps.m, app.Id)
+		ag.apps.Unlock()
+	}()
+
+	return nil
 }
 
 // Monitoring all applications
