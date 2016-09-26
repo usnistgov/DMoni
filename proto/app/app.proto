@@ -32,9 +32,11 @@ message SubRequest {
     // Command to  the app
     repeated string ExecArgs = 2;
     // IP address of the node to launch the app
-    string Ip = 3;
+    string EntryNode = 3;
 	// Flag indicating if enalble application monitoring
     bool Moni = 4;
+    // Frameworks used by the application
+    repeated string Frameworks = 5;
 }
 
 message KillReply {}

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -39,7 +40,6 @@ type App struct {
 	JobIds []string
 	// Pid of the application's main process, if it's zero
 	// means the process is not on this node.
-	// TODO: use int instead of int32
 	EntryPid int
 	// Processes of the app
 	Procs []common.Process
@@ -179,13 +179,16 @@ func (ag *Agent) Monitor() {
 	for {
 		for _, app := range ag.apps.m {
 			log.Printf("Monitoring app %s", app.Id)
+
 			procs := make([]common.Process, 0)
-			if app.EntryPid != 0 {
-				procs = append(procs, common.Process{Pid: app.EntryPid})
+			if a, present := ag.lchApps.m[app.Id]; present {
+				// Include the entry process of the app
+				procs = append(procs, common.Process{
+					Pid:       a.EntryPid,
+					ShortName: a.exe,
+					FullName:  fmt.Sprintf("%s %s", a.exe, strings.Join(a.args, " ")),
+				})
 			}
-
-			//TODO(lizhong): using golang's io Process to monitor the main process
-
 			// Detect all the running processes for each framework of this app
 			for i, fw := range app.Frameworks {
 				fps, err := ag.detectors[fw].Detect(app.JobIds[i])

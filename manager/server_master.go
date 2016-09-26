@@ -31,7 +31,7 @@ func (s *masterServer) Run() {
 	// Run clustering server
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.mng.me.Port))
 	if err != nil {
-		grpclog.Fatalf("failed to listen: %v", err)
+		grpclog.Fatalf("Failed to listen: %v", err)
 	}
 	grpcServer := grpc.NewServer()
 	mPb.RegisterManagerServer(grpcServer, s)
@@ -85,14 +85,13 @@ func (s *masterServer) NotifyDone(ctx context.Context, in *mPb.NDRequest) (*mPb.
 	log.Printf("stderr: %s", in.Stderr)
 
 	if app.monitored {
-		go func() {
-			newCtx, cancel := context.WithTimeout(context.Background(), time.Second*1)
-			defer cancel()
-			err := s.mng.deregister(newCtx, in.AppId)
-			if err != nil {
-				log.Printf("Failed to deregister app %s", in.AppId)
-			}
-		}()
+		// Stop monitoring the app on agents
+		newCtx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+		defer cancel()
+		err := s.mng.deregister(newCtx, in.AppId)
+		if err != nil {
+			log.Printf("Failed to deregister app %s: %v", in.AppId, err)
+		}
 	}
 
 	// TODO(lizhong): store app info in db
