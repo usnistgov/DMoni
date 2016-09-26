@@ -161,6 +161,54 @@ func (m *Manager) deregister(ctx context.Context, appId string) error {
 	return nil
 }
 
+// monitor call Register RPC of agents to start to monitor the
+// app's processes.
+func (m *Manager) monitor(ctx context.Context, app *App) error {
+	// reg registers the app with a agent
+	reg := func(ag *common.Node) error {
+		// Create an agent client
+		client, closeConn, err := getAgentClient(ag.Ip, ag.Port)
+		if err != nil {
+			log.Printf("Failed getAgentClient(): %v", err)
+			return err
+		}
+		defer closeConn()
+
+		// Send app info to agent
+		ai := &agPb.AppInfo{
+			Id:         app.Id,
+			Frameworks: app.Frameworks,
+			JobIds:     app.JobIds,
+		}
+		_, err = client.Register(ctx, ai)
+		if err != nil {
+			grpclog.Printf("%v.Register(_) = _, %v", client, err)
+			return err
+		}
+		return nil
+	}
+
+	// Register the app with all agents
+	m.agents.RLock()
+	var wg sync.WaitGroup
+	wg.Add(len(m.agents.m))
+	for _, ag := range m.agents.m {
+		go func(ag *common.Node) {
+			defer wg.Done()
+			if err := reg(ag); err != nil {
+				log.Printf("Failed to register app %s with (%s, %s): %v",
+					app.Id, ag.Id, ag.Ip, err)
+			}
+		}(ag)
+	}
+	m.agents.RUnlock()
+	wg.Wait()
+
+	// TODO: handle failures of registration with agents
+
+	return nil
+}
+
 // findAgent returns node corresponding to a given ip address
 func (m *Manager) findNode(ip string) *common.Node {
 	m.agents.RLock()

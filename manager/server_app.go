@@ -43,28 +43,31 @@ func (s *appServer) Run() {
 
 // Submit an application
 func (s *appServer) Submit(ctx context.Context, in *appPb.SubRequest) (*appPb.AppIndex, error) {
-	// Generate an id for the application
-	id := strings.Join(strings.Split(uuid.NewV4().String(), "-"), "")
-	grpclog.Printf("Launching app %s", id)
-
-	app := &App{
-		Id:        id,
-		ExecName:  in.ExecName,
-		ExecArgs:  in.ExecArgs,
-		monitored: in.Moni,
-	}
-
-	node := s.mng.findNode(in.Ip)
+	// Connect to the target node to launch the app
+	node := s.mng.findNode(in.EntryNode)
 	if node == nil {
-		return nil, errors.New(fmt.Sprintf("Node %d does not exist", in.Ip))
+		return nil, errors.New(fmt.Sprintf("Node %d does not exist", in.EntryNode))
 	}
 	client, close, err := getAgentClient(node.Ip, node.Port)
 	if err != nil {
 		log.Printf("Failed to get agent %s's client: %v", node.Id, err)
-		return nil, errors.New(fmt.Sprintf("Failed to connect to %s", in.Ip))
+		return nil, errors.New(fmt.Sprintf("Failed to connect to %s", in.EntryNode))
 	}
 	defer close()
 
+	// Generate an id for the application
+	id := strings.Join(strings.Split(uuid.NewV4().String(), "-"), "")
+	app := &App{
+		Id:         id,
+		ExecName:   in.ExecName,
+		ExecArgs:   in.ExecArgs,
+		monitored:  in.Moni,
+		Frameworks: in.Frameworks,
+		JobIds:     make([]string, len(in.Frameworks)),
+	}
+	log.Printf("Launching app %s", id)
+
+	// Launch the app on the target node trough the node's agent
 	_, err = client.Launch(ctx,
 		&agPb.LchRequest{
 			AppId:    id,
@@ -77,13 +80,20 @@ func (s *appServer) Submit(ctx context.Context, in *appPb.SubRequest) (*appPb.Ap
 		return nil, errors.New(fmt.Sprintf("Failed to launch app: %v", err))
 	}
 
+	if in.Moni {
+		// Register the app on all node for monitoring its processes
+		err = s.mng.monitor(ctx, app)
+		if err != nil {
+			log.Printf("Failed to monitor its processes: %v", err)
+			// TODO: kill the application on the agent
+			return nil, errors.New(fmt.Sprintf(
+				"Launched but failed to monitor the application: %v", err))
+		}
+	}
+
 	s.mng.apps.Lock()
 	s.mng.apps.m[id] = app
 	s.mng.apps.Unlock()
-
-	if in.Moni {
-		// Register app on all node for monitoring its processes
-	}
 
 	return &appPb.AppIndex{Id: id}, nil
 }
@@ -94,20 +104,8 @@ func (s *appServer) Kill(ctx context.Context, in *appPb.AppIndex) (*appPb.KillRe
 }
 
 // Register an application
+// TODO: remove this service
 func (s *appServer) Register(ctx context.Context, in *appPb.AppDesc) (*appPb.AppIndex, error) {
-
-	// If the enrty node ip address is not empty string in AppDesc,
-	// then check the existence of the given node.
-	// Otherwise, assume user want to monitoring only the framework,
-	// or a job of the framework.
-	var entry *common.Node
-	if strings.Compare(in.EntryNode, "") != 0 {
-		entry = s.mng.findNode(in.EntryNode)
-		if entry == nil {
-			return nil, errors.New(fmt.Sprintf(
-				"Entry node %s does not exist", in.EntryNode))
-		}
-	}
 
 	// Generate an id for the application
 	id := strings.Join(strings.Split(uuid.NewV4().String(), "-"), "")
@@ -118,57 +116,8 @@ func (s *appServer) Register(ctx context.Context, in *appPb.AppDesc) (*appPb.App
 		Frameworks: in.Frameworks,
 		JobIds:     in.JobIds,
 		EntryNode:  in.EntryNode,
-		EntryPid:   int(in.EntryPid),
 	}
-
-	reg := func(ag *common.Node, pid int) error {
-		// Create an agent client
-		client, closeConn, err := getAgentClient(ag.Ip, ag.Port)
-		if err != nil {
-			log.Printf("Failed getAgentClient(): %v", err)
-			return err
-		}
-		defer closeConn()
-
-		//grpclog.Printf("Register app %s with agent %s:%d", app.Id, ag.Id, ag.Port)
-
-		// Send app info to agent
-		ai := &agPb.AppInfo{
-			Id:         app.Id,
-			Frameworks: app.Frameworks,
-			JobIds:     app.JobIds,
-			Pid:        int64(pid),
-		}
-		_, err = client.Register(ctx, ai)
-		if err != nil {
-			grpclog.Printf("%v.Register(_) = _, %v", client, err)
-			return err
-		}
-		return nil
-	}
-
-	// Register the app with all agents
-	s.mng.agents.RLock()
-	var wg sync.WaitGroup
-	wg.Add(len(s.mng.agents.m))
-	for _, ag := range s.mng.agents.m {
-		go func(ag *common.Node) {
-			defer wg.Done()
-			pid := 0
-			if entry != nil && strings.Compare(ag.Id, entry.Id) == 0 {
-				pid = int(in.EntryPid)
-			}
-			// TODO(lizhong): if failed to propagate app info to agents
-			_ = reg(ag, pid)
-		}(ag)
-	}
-	s.mng.agents.RUnlock()
-	wg.Wait()
-
-	// Register the app on manager
-	s.mng.apps.Lock()
-	s.mng.apps.m[id] = app
-	s.mng.apps.Unlock()
+	_ = s.mng.monitor(ctx, app)
 
 	return &appPb.AppIndex{Id: id}, nil
 }

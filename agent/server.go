@@ -39,7 +39,7 @@ func (s *agentServer) Run() {
 
 // Launch starts an application
 func (s *agentServer) Launch(ctx context.Context, in *pb.LchRequest) (*pb.LchReply, error) {
-	grpclog.Println("Launch application %s", in.AppId)
+	grpclog.Printf("Launch application %s", in.AppId)
 	err := s.ag.launch(in.AppId, in.ExecName, in.ExecArgs...)
 	if err != nil {
 		log.Printf("Failed to launch app %s: %v", in.AppId, err)
@@ -66,7 +66,6 @@ func (s *agentServer) Register(ctx context.Context, in *pb.AppInfo) (*pb.RegRepl
 		Id:         in.Id,
 		Frameworks: in.Frameworks,
 		JobIds:     in.JobIds,
-		EntryPid:   int(in.Pid),
 		Procs:      make([]common.Process, 0),
 		ofile:      path.Join(outDir, in.Id),
 	}
