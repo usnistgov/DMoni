@@ -33,6 +33,8 @@ message SubRequest {
     repeated string ExecArgs = 2;
     // IP address of the node to launch the app
     string Ip = 3;
+	// Flag indicating if enalble application monitoring
+    bool Moni = 4;
 }
 
 message KillReply {}
@@ -40,7 +42,7 @@ message KillReply {}
 // Application description used to register an app
 message AppDesc {
     // Entry Process id
-    int32 EntryPid = 1;
+    int64 EntryPid = 1;
     // Entry node IP address
     string EntryNode = 2;
     // Frameworks used by the application
@@ -71,7 +73,7 @@ message AppStatus {
 
 message Process {
     // Process's operating system pid
-    int32 Pid = 1;
+    int64 Pid = 1;
     // Process name
     string Name = 2;
     // Command line to run the process

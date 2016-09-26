@@ -47,13 +47,12 @@ func (s *appServer) Submit(ctx context.Context, in *appPb.SubRequest) (*appPb.Ap
 	id := strings.Join(strings.Split(uuid.NewV4().String(), "-"), "")
 	grpclog.Printf("Launching app %s", id)
 
-	/*
-		_ := &common.App{
-			Id:       id,
-			ExecName: in.ExecName,
-			ExecArgs: in.ExecArgs,
-		}
-	*/
+	app := &App{
+		Id:        id,
+		ExecName:  in.ExecName,
+		ExecArgs:  in.ExecArgs,
+		monitored: in.Moni,
+	}
 
 	node := s.mng.findNode(in.Ip)
 	if node == nil {
@@ -71,10 +70,21 @@ func (s *appServer) Submit(ctx context.Context, in *appPb.SubRequest) (*appPb.Ap
 			AppId:    id,
 			ExecName: in.ExecName,
 			ExecArgs: in.ExecArgs,
+			Moni:     in.Moni,
 		})
 	if err != nil {
 		log.Printf("Failed to launch app: %v", err)
+		return nil, errors.New(fmt.Sprintf("Failed to launch app: %v", err))
 	}
+
+	s.mng.apps.Lock()
+	s.mng.apps.m[id] = app
+	s.mng.apps.Unlock()
+
+	if in.Moni {
+		// Register app on all node for monitoring its processes
+	}
+
 	return &appPb.AppIndex{Id: id}, nil
 }
 
@@ -103,15 +113,15 @@ func (s *appServer) Register(ctx context.Context, in *appPb.AppDesc) (*appPb.App
 	id := strings.Join(strings.Split(uuid.NewV4().String(), "-"), "")
 	grpclog.Printf("Registering app %s", id)
 
-	app := &common.App{
+	app := &App{
 		Id:         id,
 		Frameworks: in.Frameworks,
 		JobIds:     in.JobIds,
 		EntryNode:  in.EntryNode,
-		EntryPid:   in.EntryPid,
+		EntryPid:   int(in.EntryPid),
 	}
 
-	reg := func(ag *common.Node, pid int32) error {
+	reg := func(ag *common.Node, pid int) error {
 		// Create an agent client
 		client, closeConn, err := getAgentClient(ag.Ip, ag.Port)
 		if err != nil {
@@ -127,7 +137,7 @@ func (s *appServer) Register(ctx context.Context, in *appPb.AppDesc) (*appPb.App
 			Id:         app.Id,
 			Frameworks: app.Frameworks,
 			JobIds:     app.JobIds,
-			Pid:        pid,
+			Pid:        int64(pid),
 		}
 		_, err = client.Register(ctx, ai)
 		if err != nil {
@@ -144,9 +154,9 @@ func (s *appServer) Register(ctx context.Context, in *appPb.AppDesc) (*appPb.App
 	for _, ag := range s.mng.agents.m {
 		go func(ag *common.Node) {
 			defer wg.Done()
-			pid := int32(0)
+			pid := 0
 			if entry != nil && strings.Compare(ag.Id, entry.Id) == 0 {
-				pid = in.EntryPid
+				pid = int(in.EntryPid)
 			}
 			// TODO(lizhong): if failed to propagate app info to agents
 			_ = reg(ag, pid)

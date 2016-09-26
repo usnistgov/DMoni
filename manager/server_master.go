@@ -75,14 +75,31 @@ func (s *masterServer) SayHi(ctx context.Context, ni *mPb.NodeInfo) (*mPb.NodeIn
 
 // NotifyDone signifies the finish of an applicaiton and
 // triggers application deregistration.
-func (s *masterServer) NotifyDone(ctx context.Context, in *mPb.AppIndex) (*mPb.NDReply, error) {
-	go func() {
-		newCtx, cancel := context.WithTimeout(context.Background(), time.Second*1)
-		defer cancel()
-		err := s.mng.deregister(newCtx, in.Id)
-		if err != nil {
-			log.Printf("Failed to deregister app %s", in.Id)
-		}
-	}()
+func (s *masterServer) NotifyDone(ctx context.Context, in *mPb.NDRequest) (*mPb.NDReply, error) {
+	s.mng.apps.RLock()
+	app := s.mng.apps.m[in.AppId]
+	s.mng.apps.RUnlock()
+
+	log.Printf("NotifyDone app %s, %v, %v", in.AppId, in.StartTime, in.EndTime)
+	log.Printf("stdout: %s", in.Stdout)
+	log.Printf("stderr: %s", in.Stderr)
+
+	if app.monitored {
+		go func() {
+			newCtx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+			defer cancel()
+			err := s.mng.deregister(newCtx, in.AppId)
+			if err != nil {
+				log.Printf("Failed to deregister app %s", in.AppId)
+			}
+		}()
+	}
+
+	// TODO(lizhong): store app info in db
+
+	s.mng.apps.Lock()
+	delete(s.mng.apps.m, in.AppId)
+	s.mng.apps.Unlock()
+
 	return &mPb.NDReply{}, nil
 }
