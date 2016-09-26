@@ -11,6 +11,7 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/grpclog"
+	"gopkg.in/olivere/elastic.v3"
 
 	"github.com/lizhongz/dmoni/common"
 	agPb "github.com/lizhongz/dmoni/proto/agent"
@@ -217,6 +218,26 @@ func (m *Manager) findNode(ip string) *common.Node {
 		if strings.Compare(ag.Ip, ip) == 0 {
 			return ag
 		}
+	}
+	return nil
+}
+
+func (m *Manager) logApp(data map[string]interface{}) error {
+	// Create an ElasticSearch client
+	client, err := elastic.NewClient(
+		elastic.SetSniff(false),
+		elastic.SetURL("http://192.168.0.3:9200"))
+	if err != nil {
+		log.Printf("Failed to create ElasticSearch client: %v", err)
+		return err
+	}
+
+	_, err = client.Index().
+		Index("dmoni").Type("app").
+		BodyJson(data).Refresh(true).Do()
+	if err != nil {
+		log.Printf("Failed to store data in ElasticSearch: %v", err)
+		return err
 	}
 	return nil
 }

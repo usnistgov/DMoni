@@ -80,9 +80,10 @@ func (s *masterServer) NotifyDone(ctx context.Context, in *mPb.NDRequest) (*mPb.
 	app := s.mng.apps.m[in.AppId]
 	s.mng.apps.RUnlock()
 
-	log.Printf("NotifyDone app %s, %v, %v", in.AppId, in.StartTime, in.EndTime)
-	log.Printf("stdout: %s", in.Stdout)
-	log.Printf("stderr: %s", in.Stderr)
+	log.Printf("App %s exited", in.AppId)
+	//log.Printf("NotifyDone app %s, %v, %v", in.AppId, in.StartTime, in.EndTime)
+	//log.Printf("stdout: %s", in.Stdout)
+	//log.Printf("stderr: %s", in.Stderr)
 
 	if app.monitored {
 		// Stop monitoring the app on agents
@@ -94,7 +95,25 @@ func (s *masterServer) NotifyDone(ctx context.Context, in *mPb.NDRequest) (*mPb.
 		}
 	}
 
-	// TODO(lizhong): store app info in db
+	// Store app info in db
+	st := time.Unix(in.StartTime.Seconds, 0).Format(time.RFC3339)
+	et := time.Unix(in.EndTime.Seconds, 0).Format(time.RFC3339)
+	data := map[string]interface{}{
+		"app_id":     app.Id,
+		"entry_node": app.EntryNode,
+		"exec":       app.ExecName,
+		"args":       app.ExecArgs,
+		"start_at":   st,
+		"end_at":     et,
+		"stdout":     in.Stdout,
+		"stderr":     in.Stderr,
+		"timestamp":  time.Now().Format(time.RFC3339),
+	}
+	go func() {
+		if err := s.mng.logApp(data); err != nil {
+			log.Printf("Failed to log application: %v", err)
+		}
+	}()
 
 	s.mng.apps.Lock()
 	delete(s.mng.apps.m, in.AppId)
