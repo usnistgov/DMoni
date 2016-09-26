@@ -31,7 +31,7 @@ func cmd_jps() ([]common.Process, error) {
 				return nil, err
 			}
 			procs = append(procs, common.Process{
-				Pid:      int32(pid),
+				Pid:      pid,
 				FullName: parts[1],
 			})
 		}

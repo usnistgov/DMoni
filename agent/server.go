@@ -37,7 +37,9 @@ func (s *agentServer) Run() {
 	grpcServer.Serve(lis)
 }
 
+// Launch starts an application
 func (s *agentServer) Launch(ctx context.Context, in *pb.LchRequest) (*pb.LchReply, error) {
+	grpclog.Println("Launch application %s", in.AppId)
 	err := s.ag.launch(in.AppId, in.ExecName, in.ExecArgs...)
 	if err != nil {
 		log.Printf("Failed to launch app %s: %v", in.AppId, err)
@@ -64,7 +66,7 @@ func (s *agentServer) Register(ctx context.Context, in *pb.AppInfo) (*pb.RegRepl
 		Id:         in.Id,
 		Frameworks: in.Frameworks,
 		JobIds:     in.JobIds,
-		EntryPid:   in.Pid,
+		EntryPid:   int(in.Pid),
 		Procs:      make([]common.Process, 0),
 		ofile:      path.Join(outDir, in.Id),
 	}
@@ -120,7 +122,7 @@ func (s *agentServer) GetProcesses(ctx context.Context, in *pb.ProcRequest) (*pb
 	}
 	for i, p := range a.Procs {
 		list.Procs[i] = &pb.Process{
-			Pid:  p.Pid,
+			Pid:  int64(p.Pid),
 			Name: p.ShortName,
 			Cmd:  p.FullName,
 		}

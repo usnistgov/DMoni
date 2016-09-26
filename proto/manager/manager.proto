@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+import "google/protobuf/timestamp.proto";
+
 package manager;
 
 // Interface exported by manager for cluster agents
@@ -10,7 +12,7 @@ service Manager {
 
     // Agent notifies the manager when an application is finished
     // or the entry/main process does not exists.
-    rpc NotifyDone(AppIndex) returns (NDReply) {}
+    rpc NotifyDone(NDRequest) returns (NDReply) {}
 
     // TODO(lizhong): Get all the agent nodes
 }
@@ -29,9 +31,16 @@ message NodeInfo {
     int32 Heartbeat = 4;
 }
 
-// Application index
-message AppIndex {
-    string Id = 1;
+message NDRequest {
+    string AppId = 1;
+    // Start time
+    google.protobuf.Timestamp StartTime = 2;
+    // End time
+    google.protobuf.Timestamp EndTime  = 3;
+    // output from stdout
+    string Stdout = 4;
+    // output from stderr
+    string Stderr = 5;
 }
 
 // NotifyDone's reply message

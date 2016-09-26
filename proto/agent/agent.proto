@@ -27,6 +27,8 @@ message LchRequest {
     string ExecName = 2;
     // Arguments of execution
     repeated string ExecArgs = 3;
+	// Flag indicating if enalble application monitoring
+    bool Moni = 4;
 }
 
 message LchReply {}
@@ -43,12 +45,12 @@ message AppInfo {
 	// Pid of the application's main process.
     // If it's set, then the process on the same node as
     // the target agent, otherwise not.
-    int32 Pid = 5;
+    int64 Pid = 5;
 }
 
 message Process {
     // Process's operating system pid
-    int32 Pid = 1;
+    int64 Pid = 1;
     // Process name
     string Name = 2;
     // Command line to run the process

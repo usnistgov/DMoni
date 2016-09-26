@@ -16,13 +16,39 @@ import (
 	agPb "github.com/lizhongz/dmoni/proto/agent"
 )
 
+// Application info used for monitoring
+type App struct {
+	// Application Id
+	Id string
+	// Frameworks used by this application
+	Frameworks []string
+	// Job Ids in corresponding frameworks
+	JobIds []string
+	// IP address of the node where the app started
+	EntryNode string
+	// Pid of the application's main process
+	EntryPid int
+	// Status of the application: running, exited
+	Status string
+
+	// Flag indicating if monitoring the application is enbaled
+	monitored bool
+	// Flag indicating if the app is launched by dmoni
+	launched bool
+
+	// Executable name
+	ExecName string
+	// Execution arguments
+	ExecArgs []string
+}
+
 type appMap struct {
-	m map[string]*common.App
+	m map[string]*App
 	sync.RWMutex
 }
 
 func newAppMap() *appMap {
-	return &appMap{m: make(map[string]*common.App)}
+	return &appMap{m: make(map[string]*App)}
 }
 
 type agentMap struct {
@@ -35,7 +61,7 @@ func newAgentMap() *agentMap {
 }
 
 type Manager struct {
-	// Monitored applications
+	// Submitted or registered applications
 	apps *appMap
 
 	// Cluster nodes info
@@ -87,35 +113,8 @@ func NewManager(cfg *Config) *Manager {
 }
 
 func (m *Manager) Run() {
-
 	go m.masterServer.Run()
-
 	m.appServer.Run()
-
-	// TODO(lizhong): check if agents are alive
-
-	// Testing: Register an app
-
-	/*
-		app := &common.App{
-			Id:         "we3923xc92",
-			Frameworks: []string{"spark", "hadoop"},
-		}
-
-		time.Sleep(3 * time.Second)
-		m.register(app)
-		time.Sleep(5 * time.Second)
-
-		for i := 0; i < 10; i++ {
-			_, err := m.collectAppProcs(app.Id)
-			if err != nil {
-				grpclog.Printf("Failed to collect app %s's processes: %v", err)
-			}
-			time.Sleep(3 * time.Second)
-		}
-
-		m.deregister(app.Id)
-	*/
 }
 
 // deregister an application

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	timestamp "github.com/golang/protobuf/ptypes/timestamp"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/grpclog"
@@ -39,7 +40,7 @@ type App struct {
 	// Pid of the application's main process, if it's zero
 	// means the process is not on this node.
 	// TODO: use int instead of int32
-	EntryPid int32
+	EntryPid int
 	// Processes of the app
 	Procs []common.Process
 	// Output file of monitored data
@@ -49,6 +50,14 @@ type App struct {
 	exe string
 	// arguments for running the app
 	args []string
+	// Start time
+	stime time.Time
+	// End time
+	etime time.Time
+	// stdout
+	sout bytes.Buffer
+	// stderr
+	serr bytes.Buffer
 }
 
 type AppMap struct {
@@ -57,6 +66,8 @@ type AppMap struct {
 }
 
 type Agent struct {
+	// Launched applications by agent
+	lchApps *AppMap
 	// monitored Applications
 	apps *AppMap
 	// Process detectors for different frameworks
@@ -85,7 +96,8 @@ type Config struct {
 // Create an agent given manager node's address (IP and port)
 func NewAgent(cfg *Config) *Agent {
 	ag := &Agent{
-		apps: &AppMap{m: make(map[string]*App)},
+		apps:    &AppMap{m: make(map[string]*App)},
+		lchApps: &AppMap{m: make(map[string]*App)},
 		detectors: map[string]detector.Detector{
 			"hadoop": &detector.HadoopDetector{},
 			"spark":  new(detector.SparkDetector),
@@ -117,39 +129,45 @@ func (ag *Agent) Run() {
 	ag.Monitor()
 }
 
+// launch runs an application as a subprocess.
 func (ag *Agent) launch(appId string, exe string, arg ...string) error {
+	app := &App{
+		Id:   appId,
+		exe:  exe,
+		args: arg,
+	}
+
 	// Run application as a child process
 	cmd := exec.Command(exe, arg...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = &app.sout
+	cmd.Stderr = &app.serr
 	err := cmd.Start()
 	if err != nil {
 		log.Printf("Failed to execute %s %v: %v", exe, arg, err)
 		return err
 	}
+	app.stime = time.Now()
+	app.EntryPid = cmd.Process.Pid
 
-	app := &App{
-		Id:       appId,
-		exe:      exe,
-		args:     arg,
-		EntryPid: int32(cmd.Process.Pid),
-	}
 	ag.apps.Lock()
-	//ag.apps.m[app.Id] = app
+	ag.lchApps.m[app.Id] = app
 	ag.apps.Unlock()
 
 	go func() {
+		// Wait the application exits
 		err = cmd.Wait()
 		if err != nil {
 			log.Printf("App %s exits with error: %v", app.Id, err)
 		} else {
 			log.Printf("App %s exits", app.Id)
 		}
+		app.etime = time.Now()
 
-		// TODO: Notify manager
+		// Notify manager the application is finished
+		ag.notifyDone(app)
 
 		ag.apps.Lock()
-		//delete(ag.apps.m, app.Id)
+		delete(ag.lchApps.m, app.Id)
 		ag.apps.Unlock()
 	}()
 
@@ -195,12 +213,6 @@ func (ag *Agent) Monitor() {
 				cmd.Stdout = &buf
 				if err := cmd.Run(); err != nil {
 					log.Print("Failed to get process snapshot: %v", err)
-					if app.EntryPid != 0 && p.Pid == app.EntryPid {
-						// Notify The application is finished or the entry
-						// process does not exist.
-						go ag.notifyDone(app.Id)
-						break
-					}
 					continue
 				}
 
@@ -282,7 +294,7 @@ func (ag *Agent) cast() {
 
 // nitifyDone send an app's Id to mananger and tell him that
 // an applicaiton is finished.
-func (ag *Agent) notifyDone(appId string) {
+func (ag *Agent) notifyDone(app *App) {
 	// Create a grpc connection
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithInsecure())
@@ -298,12 +310,18 @@ func (ag *Agent) notifyDone(appId string) {
 	//TODO(lizhong): if failed to notify mananger, it should be
 	//able to retry later.
 
-	log.Printf("Notify mananger app %s is done", appId)
+	log.Printf("Notify mananger app %s is done", app.Id)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
 	defer cancel()
-	_, err = client.NotifyDone(ctx, &pb.AppIndex{Id: appId})
+	_, err = client.NotifyDone(ctx, &pb.NDRequest{
+		AppId:     app.Id,
+		StartTime: &timestamp.Timestamp{Seconds: app.stime.Unix()},
+		EndTime:   &timestamp.Timestamp{Seconds: app.etime.Unix()},
+		Stdout:    app.sout.String(),
+		Stderr:    app.serr.String(),
+	})
 	if err != nil {
-		grpclog.Printf("Failed to notify mananger that app %s was done", appId)
+		grpclog.Printf("Failed to notify mananger that app %s was done", app.Id)
 		return
 	}
 }
