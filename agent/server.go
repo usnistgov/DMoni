@@ -60,7 +60,7 @@ func (s *agentServer) Register(ctx context.Context, in *pb.AppInfo) (*pb.RegRepl
 	apps.RUnlock()
 
 	//grpclog.Printf("Register app %s", in.Id)
-	grpclog.Printf("Register app %s, entry pid %d", in.Id, in.Pid)
+	grpclog.Printf("Register app %s", in.Id)
 
 	app := &App{
 		Id:         in.Id,

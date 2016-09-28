@@ -324,7 +324,7 @@ func (ag *Agent) notifyDone(app *App) {
 		Stderr:    app.serr.String(),
 	})
 	if err != nil {
-		grpclog.Printf("Failed to notify mananger that app %s was done", app.Id)
+		grpclog.Printf("Failed to notify mananger that app %s was done: %v", app.Id, err)
 		return
 	}
 }
