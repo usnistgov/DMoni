@@ -175,7 +175,7 @@ func (s *appServer) GetProcesses(ctx context.Context, in *appPb.AppIndex) (*appP
 				grpclog.Printf("%v.GetProcesses(_) = _, %v", client, err)
 				return
 			}
-			agCh <- &agProcs{id: ag.Id, reply: list}
+			agCh <- &agProcs{id: ag.Ip, reply: list}
 		}(ag)
 	}
 	s.mng.agents.RUnlock()
