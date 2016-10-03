@@ -175,81 +175,108 @@ func (ag *Agent) launch(appId string, exe string, arg ...string) error {
 }
 
 // Monitoring all applications
+//
+// Monitroing an applcation at a time can be divided in to three stages:
+// 1) detect the application's processes;
+// 2) measure each process's resource usage;
+// 3) log the measured info.
 func (ag *Agent) Monitor() {
+	snap := func(app *App) {
+		// Detect application's processes
+		procs := make([]common.Process, 0)
+		if a, present := ag.lchApps.m[app.Id]; present {
+			// Include the entry process of the app
+			procs = append(procs, common.Process{
+				Pid:       a.EntryPid,
+				ShortName: a.exe,
+				FullName:  fmt.Sprintf("%s %s", a.exe, strings.Join(a.args, " ")),
+			})
+		}
+		for i, fw := range app.Frameworks {
+			// Detect pocesses of this framework
+			fps, err := ag.detectors[fw].Detect(app.JobIds[i])
+			if err != nil {
+				log.Printf("Failed to detect application' %s processes. Error: %s",
+					app.Id, err)
+				continue
+			}
+			procs = append(procs, fps...)
+		}
+		app.Procs = procs
+
+		// Create channel for measures process info
+		dataCh := make(chan *bytes.Buffer, 1)
+		defer close(dataCh)
+		// Start a dataLoggoer to store process info
+		go ag.dataLogger(app.Id, app.ofile, dataCh)
+
+		// measure each process's resource usage
+		for _, p := range app.Procs {
+			var buf bytes.Buffer
+			//TODO(lizhong): configure the path of monitor.py
+			cmd := exec.Command("python",
+				"/home/lnz5/workspace/snapshot/app/monitor.py",
+				"-n", "1", strconv.Itoa(int(p.Pid)))
+			cmd.Stdout = &buf
+			if err := cmd.Run(); err != nil {
+				log.Printf("Failed to get process snapshot: %v", err)
+				continue
+			}
+			// push measured info to output channel
+			dataCh <- &buf
+		}
+	}
+
 	for {
+		ag.apps.RLock()
+		// For each application
 		for _, app := range ag.apps.m {
 			log.Printf("Monitoring app %s", app.Id)
-
-			procs := make([]common.Process, 0)
-			if a, present := ag.lchApps.m[app.Id]; present {
-				// Include the entry process of the app
-				procs = append(procs, common.Process{
-					Pid:       a.EntryPid,
-					ShortName: a.exe,
-					FullName:  fmt.Sprintf("%s %s", a.exe, strings.Join(a.args, " ")),
-				})
-			}
-			// Detect all the running processes for each framework of this app
-			for i, fw := range app.Frameworks {
-				fps, err := ag.detectors[fw].Detect(app.JobIds[i])
-				if err != nil {
-					log.Printf("Failed to detect application' %s processes. Error: %s",
-						app.Id, err)
-					continue
-				}
-				procs = append(procs, fps...)
-			}
-			app.Procs = procs
-
-			f, err := os.OpenFile(app.ofile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
-			if err != nil {
-				log.Printf("Failed to create output file of app %s: %v", app.Id, err)
-			}
-			var buf bytes.Buffer
-
-			// Monitor the app's processes
-			for _, p := range app.Procs {
-				//TODO(lizhong): configure the path of monitor.py
-				cmd := exec.Command("python",
-					"/home/lnz5/workspace/snapshot/app/monitor.py",
-					"-n", "1", strconv.Itoa(int(p.Pid)))
-				cmd.Stdout = &buf
-				if err := cmd.Run(); err != nil {
-					log.Print("Failed to get process snapshot: %v", err)
-					continue
-				}
-
-				// Store process's performance data in a local file
-				var data interface{}
-				err = json.Unmarshal(buf.Bytes(), &data)
-				if err != nil {
-					log.Printf("Failed to unmarshal process snapshot %s: %v", buf.Bytes(), err)
-					continue
-				}
-				m := data.(map[string]interface{})
-				m["node"] = ag.me.Ip
-				m["app_id"] = app.Id
-				buf.Reset()
-
-				out, err := json.Marshal(m)
-				if err != nil {
-					log.Printf("Failed to marshal %v: %v", m, err)
-					continue
-				}
-				_, err = f.Write(out)
-				if err != nil {
-					log.Printf("Failed to write file %s: %v", app.ofile, err)
-					continue
-				}
-			}
-			f.Close()
+			go snap(app)
 		}
+		ag.apps.RUnlock()
 
 		time.Sleep(MoniInterval)
 	}
 }
 
-// Cast sends agent's information including heartbeat value
+// dataLogger retrieves process info from a data channel and
+// stores them in a temperary local file.
+func (ag *Agent) dataLogger(appId, fname string, dataCh <-chan *bytes.Buffer) {
+	// Create an temperary file
+	f, err := os.OpenFile(fname, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
+	if err != nil {
+		log.Printf("Failed to create output file %s: %v", fname, err)
+	}
+	defer f.Close()
+
+	for buf := range dataCh {
+		// Store process's performance data in a local file
+		var data interface{}
+		err = json.Unmarshal(buf.Bytes(), &data)
+		if err != nil {
+			log.Printf("Failed to unmarshal process snapshot %s: %v", buf.Bytes(), err)
+			continue
+		}
+		m := data.(map[string]interface{})
+		m["node"] = ag.me.Ip
+		m["app_id"] = appId
+		buf.Reset()
+
+		out, err := json.Marshal(m)
+		if err != nil {
+			log.Printf("Failed to marshal %v: %v", m, err)
+			continue
+		}
+		_, err = f.Write(out)
+		if err != nil {
+			log.Printf("Failed to write file %s: %v", fname, err)
+			continue
+		}
+	}
+}
+
+// cast sends agent's information including heartbeat value
 // to manager periodly, in order to let manager know he is
 // alive.
 func (ag *Agent) cast() {
