@@ -76,20 +76,14 @@ func (s *masterServer) SayHi(ctx context.Context, ni *mPb.NodeInfo) (*mPb.NodeIn
 // NotifyDone signifies the finish of an applicaiton and
 // triggers application deregistration.
 func (s *masterServer) NotifyDone(ctx context.Context, in *mPb.NDRequest) (*mPb.NDReply, error) {
-	s.mng.apps.RLock()
-	app := s.mng.apps.m[in.AppId]
-	s.mng.apps.RUnlock()
-
 	log.Printf("App %s exited", in.AppId)
-	//log.Printf("NotifyDone app %s, %v, %v", in.AppId, in.StartTime, in.EndTime)
-	//log.Printf("stdout: %s", in.Stdout)
-	//log.Printf("stderr: %s", in.Stderr)
 
+	app := s.mng.getApp(in.AppId)
 	if app.monitored {
 		// Stop monitoring the app on agents
 		newCtx, cancel := context.WithTimeout(context.Background(), time.Second*1)
 		defer cancel()
-		err := s.mng.deregister(newCtx, in.AppId)
+		err := s.mng.deregister(newCtx, app, true)
 		if err != nil {
 			log.Printf("Failed to deregister app %s: %v", in.AppId, err)
 		}

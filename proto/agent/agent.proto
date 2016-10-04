@@ -7,6 +7,9 @@ service MonitorProcs {
     // Launch an application
     rpc Launch(LchRequest) returns (LchReply) {}
 
+    // Kill a launched application
+    rpc Kill(KRequest) returns (KReply) {}
+
     // Manager registers an application, and agent responds
     // with the app's processes' info on the node.
     rpc Register(AppInfo) returns (RegReply) {}
@@ -32,6 +35,13 @@ message LchRequest {
 }
 
 message LchReply {}
+
+message KRequest {
+    // Application's id
+    string AppId = 1;
+}
+
+message KReply {}
 
 message AppInfo {
     // Application's id
@@ -75,6 +85,10 @@ message RegReply {
 message DeregRequest {
     // Application's Id
     string AppId = 1;
+    // Save application info flag.
+    // If save is ture, storing monitored app's info in database;
+    // Otherwise, dicard the info.
+    bool Save = 2;
 }
 
 // Reply message of Deregister()

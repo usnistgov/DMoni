@@ -1,7 +1,6 @@
 package manager
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -118,22 +117,43 @@ func (m *Manager) Run() {
 	m.appServer.Run()
 }
 
-// deregister an application
-func (m *Manager) deregister(ctx context.Context, appId string) error {
-	m.apps.RLock()
-	if _, ok := m.apps.m[appId]; !ok {
-		m.apps.RUnlock()
-		return errors.New(fmt.Sprintf("App %s does not exist", appId))
+// kill stops the launch app and discards all the collected info.
+func (m *Manager) kill(ctx context.Context, app *App) error {
+	if app.monitored {
+		// Stop monitoring the application
+		err := m.deregister(ctx, app, false)
+		if err != nil {
+			log.Printf("Failed to deregister app %s: %v", app.Id, err)
+		}
 	}
-	m.apps.RUnlock()
-	log.Printf("Deregister app %s", appId)
 
+	if app.launched {
+		// Create an agent client
+		ag := m.findNode(app.EntryNode)
+		client, closeConn, err := getAgentClient(ag.Ip, ag.Port)
+		if err != nil {
+			log.Printf("Failed getAgentClient(): %v", err)
+			return err
+		}
+		defer closeConn()
+
+		// Kill the application on the agent
+		_, err = client.Kill(ctx, &agPb.KRequest{AppId: app.Id})
+		if err != nil {
+			log.Printf("Failed to kill app %s: %v", app.Id, err)
+			return err
+		}
+	}
+	return nil
+}
+
+// deregister an application
+func (m *Manager) deregister(ctx context.Context, app *App, save bool) error {
 	// Deregister the app with all agents
 	m.agents.RLock()
 	var wg sync.WaitGroup
 	wg.Add(len(m.agents.m))
 	for _, ag := range m.agents.m {
-		// Create a grpc client to an agent
 		go func(ag *common.Node) {
 			defer wg.Done()
 			// Create an agent client
@@ -145,8 +165,8 @@ func (m *Manager) deregister(ctx context.Context, appId string) error {
 			defer closeConn()
 
 			// Degregister the app on the agent
-			//grpclog.Printf("Deregister app %s on with agent %s", in.Id, ag.Id)
-			_, err = client.Deregister(ctx, &agPb.DeregRequest{AppId: appId})
+			_, err = client.Deregister(
+				ctx, &agPb.DeregRequest{AppId: app.Id, Save: save})
 			if err != nil {
 				grpclog.Printf("%v.Deregister(_) = _, %v", client, err)
 				return
@@ -157,7 +177,7 @@ func (m *Manager) deregister(ctx context.Context, appId string) error {
 	wg.Wait()
 
 	m.apps.Lock()
-	delete(m.apps.m, appId)
+	delete(m.apps.m, app.Id)
 	m.apps.Unlock()
 	return nil
 }
@@ -222,6 +242,7 @@ func (m *Manager) findNode(ip string) *common.Node {
 	return nil
 }
 
+// logApp stores the app's basic information in database.
 func (m *Manager) logApp(data map[string]interface{}) error {
 	// Create an ElasticSearch client
 	client, err := elastic.NewClient(
@@ -240,6 +261,15 @@ func (m *Manager) logApp(data map[string]interface{}) error {
 		return err
 	}
 	return nil
+}
+
+// getApp looks for an app according to a given app id
+//
+// If not found, nil is returned.
+func (m *Manager) getApp(id string) *App {
+	m.apps.RLock()
+	defer m.apps.RUnlock()
+	return m.apps.m[id]
 }
 
 // getAgentClient returns a given agent's client
