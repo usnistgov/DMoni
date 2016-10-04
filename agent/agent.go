@@ -45,6 +45,10 @@ type App struct {
 	Procs []common.Process
 	// Output file of monitored data
 	ofile string
+	// Context used to check if the application is killed on purpose
+	ctx context.Context
+	// function used to stop/cancel the application
+	cancel func()
 
 	// Executable name
 	exe string
@@ -129,51 +133,6 @@ func (ag *Agent) Run() {
 	ag.Monitor()
 }
 
-// launch runs an application as a subprocess.
-func (ag *Agent) launch(appId string, exe string, arg ...string) error {
-	app := &App{
-		Id:   appId,
-		exe:  exe,
-		args: arg,
-	}
-
-	// Run application as a child process
-	cmd := exec.Command(exe, arg...)
-	cmd.Stdout = &app.sout
-	cmd.Stderr = &app.serr
-	err := cmd.Start()
-	if err != nil {
-		log.Printf("Failed to execute %s %v: %v", exe, arg, err)
-		return err
-	}
-	app.stime = time.Now()
-	app.EntryPid = cmd.Process.Pid
-
-	ag.apps.Lock()
-	ag.lchApps.m[app.Id] = app
-	ag.apps.Unlock()
-
-	go func() {
-		// Wait the application exits
-		err = cmd.Wait()
-		if err != nil {
-			log.Printf("App %s exits with error: %v", app.Id, err)
-		} else {
-			log.Printf("App %s exits", app.Id)
-		}
-		app.etime = time.Now()
-
-		// Notify manager the application is finished
-		ag.notifyDone(app)
-
-		ag.apps.Lock()
-		delete(ag.lchApps.m, app.Id)
-		ag.apps.Unlock()
-	}()
-
-	return nil
-}
-
 // Monitoring all applications
 //
 // Monitroing an applcation at a time can be divided in to three stages:
@@ -204,7 +163,7 @@ func (ag *Agent) Monitor() {
 		}
 		app.Procs = procs
 
-		// Create channel for measures process info
+		// Create channel for measuring process info
 		dataCh := make(chan *bytes.Buffer, 1)
 		defer close(dataCh)
 		// Start a dataLoggoer to store process info
@@ -238,6 +197,70 @@ func (ag *Agent) Monitor() {
 
 		time.Sleep(MoniInterval)
 	}
+}
+
+// launch runs an application as a subprocess.
+func (ag *Agent) launch(appId string, exe string, arg ...string) error {
+	app := &App{
+		Id:   appId,
+		exe:  exe,
+		args: arg,
+	}
+
+	// Run application as a child process
+	app.ctx, app.cancel = context.WithCancel(context.Background())
+	cmd := exec.CommandContext(app.ctx, exe, arg...)
+	cmd.Stdout = &app.sout
+	cmd.Stderr = &app.serr
+	err := cmd.Start()
+	if err != nil {
+		log.Printf("Failed to execute %s %v: %v", exe, arg, err)
+		return err
+	}
+	app.stime = time.Now()
+	app.EntryPid = cmd.Process.Pid
+
+	ag.lchApps.Lock()
+	ag.lchApps.m[app.Id] = app
+	ag.lchApps.Unlock()
+
+	go func() {
+		// Wait the application exits
+		err = cmd.Wait()
+		if err != nil {
+			log.Printf("App %s exits with error: %v", app.Id, err)
+		} else {
+			log.Printf("App %s exits", app.Id)
+		}
+
+		select {
+		case <-app.ctx.Done():
+			// if application is killed by manager
+			log.Printf("App %s was killed", app.Id)
+			return
+		default:
+			app.etime = time.Now()
+			// Notify manager the application is finished
+			ag.notifyDone(app)
+
+			ag.lchApps.Lock()
+			delete(ag.lchApps.m, app.Id)
+			ag.lchApps.Unlock()
+		}
+	}()
+
+	return nil
+}
+
+// kill a launched application
+func (ag *Agent) kill(app *App) {
+	// Remove the app from launched list
+	ag.lchApps.Lock()
+	delete(ag.lchApps.m, app.Id)
+	ag.lchApps.Unlock()
+
+	// Stop the app's main process
+	app.cancel()
 }
 
 // dataLogger retrieves process info from a data channel and
@@ -407,4 +430,18 @@ func (ag *Agent) storeData(app *App) error {
 		}
 	}
 	return nil
+}
+
+// getLchApp returns the pointer to a launched app
+func (ag *Agent) getLchApp(id string) *App {
+	ag.lchApps.RLock()
+	defer ag.lchApps.RUnlock()
+	return ag.lchApps.m[id]
+}
+
+// getMoniApp returns the pointer to a monitered app
+func (ag *Agent) getMoniApp(id string) *App {
+	ag.apps.RLock()
+	defer ag.apps.RUnlock()
+	return ag.apps.m[id]
 }

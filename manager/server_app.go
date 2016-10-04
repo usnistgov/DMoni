@@ -43,6 +43,8 @@ func (s *appServer) Run() {
 
 // Submit an application
 func (s *appServer) Submit(ctx context.Context, in *appPb.SubRequest) (*appPb.AppIndex, error) {
+	log.Printf("Submit an app: %s %v", in.ExecName, in.ExecArgs)
+
 	// Connect to the target node to launch the app
 	node := s.mng.findNode(in.EntryNode)
 	if node == nil {
@@ -61,6 +63,8 @@ func (s *appServer) Submit(ctx context.Context, in *appPb.SubRequest) (*appPb.Ap
 		Id:         id,
 		ExecName:   in.ExecName,
 		ExecArgs:   in.ExecArgs,
+		EntryNode:  in.EntryNode,
+		launched:   true,
 		monitored:  in.Moni,
 		Frameworks: in.Frameworks,
 		JobIds:     make([]string, len(in.Frameworks)),
@@ -100,31 +104,29 @@ func (s *appServer) Submit(ctx context.Context, in *appPb.SubRequest) (*appPb.Ap
 
 // Kill an application
 func (s *appServer) Kill(ctx context.Context, in *appPb.AppIndex) (*appPb.KillReply, error) {
-	return nil, nil
-}
-
-// Register an application
-// TODO: remove this service
-func (s *appServer) Register(ctx context.Context, in *appPb.AppDesc) (*appPb.AppIndex, error) {
-
-	// Generate an id for the application
-	id := strings.Join(strings.Split(uuid.NewV4().String(), "-"), "")
-	grpclog.Printf("Registering app %s", id)
-
-	app := &App{
-		Id:         id,
-		Frameworks: in.Frameworks,
-		JobIds:     in.JobIds,
-		EntryNode:  in.EntryNode,
+	app := s.mng.getApp(in.Id)
+	if app == nil {
+		return nil, errors.New("App does not exist")
 	}
-	_ = s.mng.monitor(ctx, app)
 
-	return &appPb.AppIndex{Id: id}, nil
+	log.Printf("Kill app %s", in.Id)
+	err := s.mng.kill(ctx, app)
+	if err != nil {
+		return nil, errors.New("Failed to kill app")
+	}
+
+	return &appPb.KillReply{}, nil
 }
 
 // Deregister an app
 func (s *appServer) Deregister(ctx context.Context, in *appPb.AppIndex) (*appPb.DeregReply, error) {
-	err := s.mng.deregister(ctx, in.Id)
+	app := s.mng.getApp(in.Id)
+	if app == nil {
+		return nil, errors.New("App does not exist")
+	}
+
+	log.Printf("Deregister app %s", in.Id)
+	err := s.mng.deregister(ctx, app, true)
 	if err != nil {
 		return nil, err
 	}

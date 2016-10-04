@@ -13,8 +13,6 @@ service AppGauge {
     rpc Submit(SubRequest) returns (AppIndex) {}
     // Kill an application
     rpc Kill(AppIndex) returns (KillReply) {}
-    // Register an application
-    rpc Register(AppDesc) returns (AppIndex) {}
     // Deregister an app
     rpc Deregister(AppIndex) returns (DeregReply) {}
     // Get the running status of an app

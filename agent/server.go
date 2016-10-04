@@ -48,35 +48,44 @@ func (s *agentServer) Launch(ctx context.Context, in *pb.LchRequest) (*pb.LchRep
 	return &pb.LchReply{}, nil
 }
 
-// Application registration service
-func (s *agentServer) Register(ctx context.Context, in *pb.AppInfo) (*pb.RegReply, error) {
-	apps := s.ag.apps
-	apps.RLock()
-	// check if already registered
-	if _, ok := apps.m[in.Id]; ok {
-		apps.RUnlock()
-		return &pb.RegReply{}, nil
-	}
-	apps.RUnlock()
+// Kill a launched application
+func (s *agentServer) Kill(ctx context.Context, in *pb.KRequest) (*pb.KReply, error) {
+	grpclog.Printf("Kill application %s", in.AppId)
 
-	//grpclog.Printf("Register app %s", in.Id)
+	app := s.ag.getLchApp(in.AppId)
+	if app == nil {
+		return nil, errors.New("App does not exist")
+	}
+
+	s.ag.kill(app)
+	return &pb.KReply{}, nil
+}
+
+// Register starts to collect resource usages for a given application.
+func (s *agentServer) Register(ctx context.Context, in *pb.AppInfo) (*pb.RegReply, error) {
 	grpclog.Printf("Register app %s", in.Id)
 
-	app := &App{
+	app := s.ag.getMoniApp(in.Id)
+	if app != nil {
+		return nil, errors.New("App has already registered")
+	}
+
+	app = &App{
 		Id:         in.Id,
 		Frameworks: in.Frameworks,
 		JobIds:     in.JobIds,
 		Procs:      make([]common.Process, 0),
 		ofile:      path.Join(outDir, in.Id),
 	}
-	apps.Lock()
-	apps.m[app.Id] = app
-	apps.Unlock()
+	s.ag.apps.Lock()
+	s.ag.apps.m[app.Id] = app
+	s.ag.apps.Unlock()
 
 	return &pb.RegReply{}, nil
 }
 
-// Application deregistration service
+// Deregister stops collecting resource usage info for a given application,
+// and triggers storing collected info in database.
 func (s *agentServer) Deregister(ctx context.Context, in *pb.DeregRequest) (*pb.DeregReply, error) {
 	grpclog.Printf("Deregister app %s", in.AppId)
 
@@ -92,12 +101,14 @@ func (s *agentServer) Deregister(ctx context.Context, in *pb.DeregRequest) (*pb.
 	apps.Unlock()
 
 	// Store app's perfromance data
-	go func() {
-		err := s.ag.storeData(a)
-		if err != nil {
-			log.Printf("Failed to store app %s data: %v", a.Id, err)
-		}
-	}()
+	if in.Save == true {
+		go func() {
+			err := s.ag.storeData(a)
+			if err != nil {
+				log.Printf("Failed to store app %s data: %v", a.Id, err)
+			}
+		}()
+	}
 
 	return &pb.DeregReply{}, nil
 }
