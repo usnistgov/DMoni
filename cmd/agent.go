@@ -18,10 +18,46 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package main
+package cmd
 
-import "github.com/lizhongz/dmoni/cmd"
+import (
+	"net"
 
-func main() {
-	cmd.Execute()
+	"github.com/lizhongz/dmoni/agent"
+
+	"github.com/spf13/cobra"
+)
+
+var aId string  // Agent's ID
+var aIP net.IP  // Agent's IP address
+var aPort int   // Agent's port
+var aMIP net.IP // Manager's IP address
+var aMPort int  // Manager's port
+
+// agentCmd represents the agent command
+var agentCmd = &cobra.Command{
+	Use:   "agent",
+	Short: "Run DMoni as an agent",
+	Long:  ``,
+	Run: func(cmd *cobra.Command, args []string) {
+		ag := agent.NewAgent(
+			&agent.Config{
+				Id:      aId,
+				Ip:      aIP.String(),
+				Port:    int32(aPort),
+				MngIp:   aMIP.String(),
+				MngPort: int32(aMPort),
+			})
+		ag.Run()
+	},
+}
+
+func init() {
+	RootCmd.AddCommand(agentCmd)
+
+	agentCmd.Flags().StringVarP(&aId, "id", "", "", "Name or identity for agent.")
+	agentCmd.Flags().IPVarP(&aIP, "ip", "", nil, "Agent's ip address.")
+	agentCmd.Flags().IntVarP(&aPort, "port", "", 5301, "Agent's port.")
+	agentCmd.Flags().IPVarP(&aMIP, "mip", "", nil, "Manager's ip address.")
+	agentCmd.Flags().IntVarP(&aMPort, "mport", "", 5300, "Manager's port.")
 }

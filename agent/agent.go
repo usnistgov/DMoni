@@ -116,6 +116,7 @@ func NewAgent(cfg *Config) *Agent {
 }
 
 func (ag *Agent) Run() {
+	log.Printf("Dmoni Agent")
 
 	// Check if data output direcotry exists. If not, create one
 	err := os.Mkdir(outDir, 0774)
