@@ -18,10 +18,40 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package main
+package cmd
 
-import "github.com/lizhongz/dmoni/cmd"
+import (
+	"github.com/lizhongz/dmoni/manager"
 
-func main() {
-	cmd.Execute()
+	"github.com/spf13/cobra"
+)
+
+// Define flags
+var mAppPort int
+var mNodePort int
+var mId string
+
+// managerCmd represents the manager command
+var managerCmd = &cobra.Command{
+	Use:   "manager",
+	Short: "Run DMoni as a manager.",
+	Long:  ``,
+	Run: func(cmd *cobra.Command, args []string) {
+		m := manager.NewManager(
+			&manager.Config{
+				Id:       mId,
+				NodePort: int32(mNodePort),
+				AppPort:  int32(mAppPort),
+			})
+		m.Run()
+	},
+}
+
+func init() {
+
+	RootCmd.AddCommand(managerCmd)
+
+	managerCmd.Flags().IntVarP(&mAppPort, "app-port", "", 5500, "Port used to talk with dmoni application clients.")
+	managerCmd.Flags().IntVarP(&mNodePort, "node-port", "", 5300, "Port used to talk with dmoni agents.")
+	managerCmd.Flags().StringVarP(&mId, "id", "", "manager", "Name or identity for manager.")
 }

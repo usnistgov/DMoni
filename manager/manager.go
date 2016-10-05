@@ -113,6 +113,7 @@ func NewManager(cfg *Config) *Manager {
 }
 
 func (m *Manager) Run() {
+	log.Printf("Dmoni Manager")
 	go m.masterServer.Run()
 	m.appServer.Run()
 }
