@@ -37,7 +37,7 @@ var aMPort int  // Manager's port
 // agentCmd represents the agent command
 var agentCmd = &cobra.Command{
 	Use:   "agent",
-	Short: "Run DMoni as an agent",
+	Short: "Run DMoni as an agent.",
 	Long:  ``,
 	Run: func(cmd *cobra.Command, args []string) {
 		ag := agent.NewAgent(
@@ -47,6 +47,7 @@ var agentCmd = &cobra.Command{
 				Port:    int32(aPort),
 				MngIp:   aMIP.String(),
 				MngPort: int32(aMPort),
+				DsAddr:  dsAddr,
 			})
 		ag.Run()
 	},

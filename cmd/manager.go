@@ -42,6 +42,7 @@ var managerCmd = &cobra.Command{
 				Id:       mId,
 				NodePort: int32(mNodePort),
 				AppPort:  int32(mAppPort),
+				DsAddr:   dsAddr,
 			})
 		m.Run()
 	},
