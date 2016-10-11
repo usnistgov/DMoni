@@ -20,12 +20,11 @@ import (
 
 	"github.com/lizhongz/dmoni/common"
 	"github.com/lizhongz/dmoni/detector"
+	"github.com/lizhongz/dmoni/manager"
 	pb "github.com/lizhongz/dmoni/proto/manager"
 )
 
 var (
-	HbInterval   = time.Second * 6 // Heartbeat time interval
-	MoniInterval = time.Second * 3 // Monitoring time interval
 	// Local directory to store monitored data
 	outDir = "/tmp/dmoni"
 )
@@ -83,6 +82,8 @@ type Agent struct {
 	manager common.Node
 	// Agent server
 	server *agentServer
+	// Data storage server's address
+	dsAddr string
 
 	//sync.RWMutex
 }
@@ -95,6 +96,9 @@ type Config struct {
 	// Manager's ip and port
 	MngIp   string
 	MngPort int32
+
+	// Data storage's address
+	DsAddr string
 }
 
 // Create an agent given manager node's address (IP and port)
@@ -109,6 +113,7 @@ func NewAgent(cfg *Config) *Agent {
 		manager: common.Node{Ip: cfg.MngIp, Port: cfg.MngPort},
 		me: common.Node{
 			Id: cfg.Id, Ip: cfg.Ip, Port: cfg.Port, Heartbeat: 0},
+		dsAddr: cfg.DsAddr,
 	}
 	ag.server = newServer(ag)
 
@@ -196,7 +201,7 @@ func (ag *Agent) Monitor() {
 		}
 		ag.apps.RUnlock()
 
-		time.Sleep(MoniInterval)
+		time.Sleep(manager.MoniInterval)
 	}
 }
 
@@ -312,7 +317,7 @@ func (ag *Agent) cast() {
 	if err != nil {
 		// If failed to dial, retry later
 		grpclog.Printf("Failed to dial manager: %v", err)
-		time.Sleep(HbInterval)
+		time.Sleep(manager.HbInterval)
 		go ag.cast()
 		return
 	}
@@ -333,7 +338,7 @@ func (ag *Agent) cast() {
 			})
 		if err != nil {
 			grpclog.Printf("%v.SayHi(_) = _, %v: ", client, err)
-			time.Sleep(HbInterval)
+			time.Sleep(manager.HbInterval)
 			go ag.cast()
 			return
 		}
@@ -342,7 +347,7 @@ func (ag *Agent) cast() {
 		ag.manager.Id = ma.Id
 		ag.manager.Heartbeat = ma.Heartbeat
 
-		time.Sleep(HbInterval)
+		time.Sleep(manager.HbInterval)
 	}
 }
 
@@ -393,7 +398,7 @@ func (ag *Agent) storeData(app *App) error {
 	// Create an ElasticSearch client
 	client, err := elastic.NewClient(
 		elastic.SetSniff(false),
-		elastic.SetURL("http://192.168.0.3:9200"))
+		elastic.SetURL(ag.dsAddr))
 	if err != nil {
 		log.Printf("Failed to create ElasticSearch client: %v", err)
 		return err

@@ -16,6 +16,11 @@ import (
 	agPb "github.com/lizhongz/dmoni/proto/agent"
 )
 
+const (
+	HbInterval   = time.Second * 15 // Agent's heartbeat interval
+	MoniInterval = time.Second * 5  // Monitoring time Interval
+)
+
 // Application info used for monitoring
 type App struct {
 	// Application Id
@@ -75,6 +80,11 @@ type Manager struct {
 	// Application server port
 	appPort int32
 
+	// Agent's heartbeat interval
+	hbIntv time.Duration
+	// ElasticSearch server's address
+	dsAddr string
+
 	sync.RWMutex
 }
 
@@ -90,6 +100,8 @@ type Config struct {
 	NodePort int32
 	// Port for app services
 	AppPort int32
+	// Data storage server's address
+	DsAddr string
 }
 
 func NewManager(cfg *Config) *Manager {
@@ -108,6 +120,8 @@ func NewManager(cfg *Config) *Manager {
 	}
 	m.agents = newAgentMap()
 	m.masterServer = newMasterServer(m)
+
+	m.dsAddr = cfg.DsAddr
 
 	return m
 }
@@ -248,7 +262,7 @@ func (m *Manager) logApp(data map[string]interface{}) error {
 	// Create an ElasticSearch client
 	client, err := elastic.NewClient(
 		elastic.SetSniff(false),
-		elastic.SetURL("http://192.168.0.3:9200"))
+		elastic.SetURL(m.dsAddr))
 	if err != nil {
 		log.Printf("Failed to create ElasticSearch client: %v", err)
 		return err
