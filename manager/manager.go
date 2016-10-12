@@ -79,8 +79,6 @@ type Manager struct {
 	// Application server port
 	appPort int32
 
-	// Agent's heartbeat interval
-	hbIntv time.Duration
 	// ElasticSearch server's address
 	dsAddr string
 
@@ -128,7 +126,35 @@ func NewManager(cfg *Config) *Manager {
 func (m *Manager) Run() {
 	log.Printf("Dmoni Manager")
 	go m.masterServer.Run()
+	go m.checkAgents()
 	m.appServer.Run()
+}
+
+// checkAgents examines periodly expired agents and remove them.
+func (m *Manager) checkAgents() {
+	for {
+		expired := make([]string, 0)
+		now := time.Now()
+		m.agents.RLock()
+		for id, ag := range m.agents.m {
+			if now.After(ag.Timestamp.Add(HbInterval * 2)) {
+				// Agent is expired
+				expired = append(expired, id)
+			}
+		}
+		m.agents.RUnlock()
+
+		if len(expired) > 0 {
+			log.Printf("agents %v expired", expired)
+			// Remove expired agents
+			m.agents.Lock()
+			for _, id := range expired {
+				delete(m.agents.m, id)
+			}
+			m.agents.Unlock()
+		}
+		time.Sleep(HbInterval * 2)
+	}
 }
 
 // kill stops the launch app and discards all the collected info.
@@ -244,7 +270,7 @@ func (m *Manager) monitor(ctx context.Context, app *App) error {
 	return nil
 }
 
-// findAgent returns node corresponding to a given ip address
+// findAgent returns node/agent corresponding to a given ip address
 func (m *Manager) findNode(ip string) *common.Node {
 	m.agents.RLock()
 	defer m.agents.RUnlock()
@@ -256,13 +282,22 @@ func (m *Manager) findNode(ip string) *common.Node {
 	return nil
 }
 
-// getApp looks for an app according to a given app id
+// getApp looks for an app according to a given app id.
 //
 // If not found, nil is returned.
 func (m *Manager) getApp(id string) *App {
 	m.apps.RLock()
 	defer m.apps.RUnlock()
 	return m.apps.m[id]
+}
+
+// getAgent looks for an agent according to a given id.
+//
+// If not found, nil is returned.
+func (m *Manager) getAgent(id string) *common.Node {
+	m.agents.RLock()
+	defer m.agents.RUnlock()
+	return m.agents.m[id]
 }
 
 // getAgentClient returns a given agent's client
