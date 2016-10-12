@@ -1,7 +1,5 @@
 syntax = "proto3";
 
-import "google/protobuf/timestamp.proto";
-
 package manager;
 
 // Interface exported by manager for cluster agents
@@ -37,10 +35,6 @@ message NDRequest {
     google.protobuf.Timestamp StartTime = 2;
     // End time
     google.protobuf.Timestamp EndTime  = 3;
-    // output from stdout
-    string Stdout = 4;
-    // output from stderr
-    string Stderr = 5;
 }
 
 // NotifyDone's reply message
