@@ -57,10 +57,10 @@ type App struct {
 	stime time.Time
 	// End time
 	etime time.Time
-	// stdout
-	sout bytes.Buffer
-	// stderr
-	serr bytes.Buffer
+	// stdout of app's main process
+	sout *bytes.Buffer
+	// stderr of app's main process
+	serr *bytes.Buffer
 }
 
 type AppMap struct {
@@ -206,19 +206,21 @@ func (ag *Agent) Monitor() {
 }
 
 // launch runs an application as a subprocess.
-func (ag *Agent) launch(appId string, exe string, arg ...string) error {
+func (ag *Agent) launch(appId string, exe string, arg ...string) (err error) {
 	app := &App{
 		Id:   appId,
 		exe:  exe,
 		args: arg,
+		sout: bytes.NewBuffer(make([]byte, 0, 1024)),
+		serr: bytes.NewBuffer(make([]byte, 0, 1024)),
 	}
 
 	// Run application as a child process
 	app.ctx, app.cancel = context.WithCancel(context.Background())
 	cmd := exec.CommandContext(app.ctx, exe, arg...)
-	cmd.Stdout = &app.sout
-	cmd.Stderr = &app.serr
-	err := cmd.Start()
+	cmd.Stdout = app.sout
+	cmd.Stderr = app.serr
+	err = cmd.Start()
 	if err != nil {
 		log.Printf("Failed to execute %s %v: %v", exe, arg, err)
 		return err
@@ -246,7 +248,7 @@ func (ag *Agent) launch(appId string, exe string, arg ...string) error {
 			return
 		default:
 			app.etime = time.Now()
-			// Notify manager the application is finished
+			go ag.logApp(app)
 			ag.notifyDone(app)
 
 			ag.lchApps.Lock()
@@ -267,42 +269,6 @@ func (ag *Agent) kill(app *App) {
 
 	// Stop the app's main process
 	app.cancel()
-}
-
-// dataLogger retrieves process info from a data channel and
-// stores them in a temperary local file.
-func (ag *Agent) dataLogger(appId, fname string, dataCh <-chan *bytes.Buffer) {
-	// Create an temperary file
-	f, err := os.OpenFile(fname, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
-	if err != nil {
-		log.Printf("Failed to create output file %s: %v", fname, err)
-	}
-	defer f.Close()
-
-	for buf := range dataCh {
-		// Store process's performance data in a local file
-		var data interface{}
-		err = json.Unmarshal(buf.Bytes(), &data)
-		if err != nil {
-			log.Printf("Failed to unmarshal process snapshot %s: %v", buf.Bytes(), err)
-			continue
-		}
-		m := data.(map[string]interface{})
-		m["node"] = ag.me.Ip
-		m["app_id"] = appId
-		buf.Reset()
-
-		out, err := json.Marshal(m)
-		if err != nil {
-			log.Printf("Failed to marshal %v: %v", m, err)
-			continue
-		}
-		_, err = f.Write(out)
-		if err != nil {
-			log.Printf("Failed to write file %s: %v", fname, err)
-			continue
-		}
-	}
 }
 
 // cast sends agent's information including heartbeat value
@@ -351,7 +317,7 @@ func (ag *Agent) cast() {
 	}
 }
 
-// nitifyDone send an app's Id to mananger and tell him that
+// nitifyDone sends an app's Id to mananger and tell him that
 // an applicaiton is finished.
 func (ag *Agent) notifyDone(app *App) {
 	// Create a grpc connection
@@ -366,9 +332,6 @@ func (ag *Agent) notifyDone(app *App) {
 	defer conn.Close()
 	client := pb.NewManagerClient(conn)
 
-	//TODO(lizhong): if failed to notify mananger, it should be
-	//able to retry later.
-
 	log.Printf("Notify mananger app %s is done", app.Id)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
 	defer cancel()
@@ -376,12 +339,80 @@ func (ag *Agent) notifyDone(app *App) {
 		AppId:     app.Id,
 		StartTime: &timestamp.Timestamp{Seconds: app.stime.Unix()},
 		EndTime:   &timestamp.Timestamp{Seconds: app.etime.Unix()},
-		Stdout:    app.sout.String(),
-		Stderr:    app.serr.String(),
 	})
 	if err != nil {
 		grpclog.Printf("Failed to notify mananger that app %s was done: %v", app.Id, err)
 		return
+	}
+}
+
+// logApp stores the app's information in database.
+func (ag *Agent) logApp(app *App) error {
+	// Create an ElasticSearch client
+	client, err := elastic.NewClient(
+		elastic.SetSniff(false),
+		elastic.SetURL(ag.dsAddr))
+	if err != nil {
+		log.Printf("Failed to create ElasticSearch client: %v", err)
+		return err
+	}
+
+	st := app.stime.Format(time.RFC3339)
+	et := app.etime.Format(time.RFC3339)
+	data := map[string]interface{}{
+		"app_id":     app.Id,
+		"entry_node": ag.me.Ip,
+		"exec":       app.exe,
+		"args":       app.args,
+		"start_at":   st,
+		"end_at":     et,
+		"stdout":     app.sout.String(),
+		"stderr":     app.serr.String(),
+		"timestamp":  time.Now().Format(time.RFC3339),
+	}
+	_, err = client.Index().
+		Index("dmoni").Type("app").
+		BodyJson(data).Refresh(true).Do()
+	if err != nil {
+		log.Printf("Failed to store data in ElasticSearch: %v", err)
+		return err
+	}
+	return nil
+}
+
+// dataLogger retrieves process info from a data channel and
+// stores them in a temperary local file.
+func (ag *Agent) dataLogger(appId, fname string, dataCh <-chan *bytes.Buffer) {
+	// Create an temperary file
+	f, err := os.OpenFile(fname, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
+	if err != nil {
+		log.Printf("Failed to create output file %s: %v", fname, err)
+	}
+	defer f.Close()
+
+	for buf := range dataCh {
+		// Store process's performance data in a local file
+		var data interface{}
+		err = json.Unmarshal(buf.Bytes(), &data)
+		if err != nil {
+			log.Printf("Failed to unmarshal process snapshot %s: %v", buf.Bytes(), err)
+			continue
+		}
+		m := data.(map[string]interface{})
+		m["node"] = ag.me.Ip
+		m["app_id"] = appId
+		buf.Reset()
+
+		out, err := json.Marshal(m)
+		if err != nil {
+			log.Printf("Failed to marshal %v: %v", m, err)
+			continue
+		}
+		_, err = f.Write(out)
+		if err != nil {
+			log.Printf("Failed to write file %s: %v", fname, err)
+			continue
+		}
 	}
 }
 

@@ -89,26 +89,6 @@ func (s *masterServer) NotifyDone(ctx context.Context, in *mPb.NDRequest) (*mPb.
 		}
 	}
 
-	// Store app info in db
-	st := time.Unix(in.StartTime.Seconds, 0).Format(time.RFC3339)
-	et := time.Unix(in.EndTime.Seconds, 0).Format(time.RFC3339)
-	data := map[string]interface{}{
-		"app_id":     app.Id,
-		"entry_node": app.EntryNode,
-		"exec":       app.ExecName,
-		"args":       app.ExecArgs,
-		"start_at":   st,
-		"end_at":     et,
-		"stdout":     in.Stdout,
-		"stderr":     in.Stderr,
-		"timestamp":  time.Now().Format(time.RFC3339),
-	}
-	go func() {
-		if err := s.mng.logApp(data); err != nil {
-			log.Printf("Failed to log application: %v", err)
-		}
-	}()
-
 	s.mng.apps.Lock()
 	delete(s.mng.apps.m, in.AppId)
 	s.mng.apps.Unlock()
