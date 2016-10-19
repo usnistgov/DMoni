@@ -92,7 +92,7 @@ func (s *agentServer) Deregister(ctx context.Context, in *pb.DeregRequest) (*pb.
 	apps := s.ag.apps
 	// Check if the application exists
 	apps.Lock()
-	a, ok := apps.m[in.AppId]
+	_, ok := apps.m[in.AppId]
 	if !ok {
 		apps.Unlock()
 		return nil, nil
@@ -100,15 +100,18 @@ func (s *agentServer) Deregister(ctx context.Context, in *pb.DeregRequest) (*pb.
 	delete(apps.m, in.AppId)
 	apps.Unlock()
 
-	// Store app's perfromance data
-	if in.Save == true {
-		go func() {
-			err := s.ag.storeData(a)
-			if err != nil {
-				log.Printf("Failed to store app %s data: %v", a.Id, err)
-			}
-		}()
-	}
+	// TODO(lizhong): why in.Save?
+	/*
+		// Store app's perfromance data
+		if in.Save == true {
+			go func() {
+				err := s.ag.storeData(a)
+				if err != nil {
+					log.Printf("Failed to store app %s data: %v", a.Id, err)
+				}
+			}()
+		}
+	*/
 
 	return &pb.DeregReply{}, nil
 }
