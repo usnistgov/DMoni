@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -25,6 +26,8 @@ import (
 )
 
 var (
+	// Dmoni's path set from DMONIPATH env variable
+	dmoniPath string
 	// Local directory to store monitored data
 	outDir = "/tmp/dmoni"
 )
@@ -84,6 +87,8 @@ type Agent struct {
 	server *agentServer
 	// Data storage server's address
 	dsAddr string
+	// Application launch channel
+	lch chan *AppExec
 
 	//sync.RWMutex
 }
@@ -116,6 +121,7 @@ type AppExec struct {
 	appId string
 	cmd   string
 	args  []string
+	errCh chan error
 }
 
 // Create an agent given manager node's address (IP and port)
@@ -137,17 +143,24 @@ func NewAgent(cfg *Config) *Agent {
 	return ag
 }
 
-func (ag *Agent) Run() {
-	log.Printf("Dmoni Agent")
-
+// checkConfig verifies the configurations
+func (ag *Agent) checkConfig() {
 	// Check if data output direcotry exists. If not, create one
 	err := os.Mkdir(outDir, 0774)
 	if err != nil && !os.IsExist(err) {
 		log.Fatalf("Failed to create output dir %s: %v", outDir, err)
 	}
 
-	// Start agent's server
-	go ag.server.Run()
+	// Check if env variable DMONIPATH is defined
+	dmoniPath = os.Getenv("DMONIPATH")
+	if dmoniPath == "" {
+		log.Fatalf("Environment variable DMONIPATH is empty")
+	}
+}
+
+func (ag *Agent) Run() {
+	ag.checkConfig()
+	log.Printf("Dmoni Agent")
 
 	// Create an app monitor to measure apps' resources usages
 	at := time.NewTicker(manager.MoniInterval)
@@ -160,14 +173,17 @@ func (ag *Agent) Run() {
 	sysDocCh := ag.sysMonitor(st.C)
 
 	// Create a launcher to launch applications
-	exeCh := make(chan *AppExec, 1)
-	appDocCh := ag.launch(exeCh)
+	ag.lch = make(chan *AppExec, 1)
+	appDocCh := ag.launch()
 
 	// Merge collected info or doc from multiple sources
 	docCh := ag.merger(procDocCh, sysDocCh, appDocCh)
 
 	// Store collected docs to database
-	store(docCh)
+	ag.store(docCh)
+
+	// Start agent's server
+	go ag.server.Run()
 
 	// Connect to manager and maintain the conenction
 	ag.cast()
@@ -187,9 +203,7 @@ func (ag *Agent) appMonitor(timeCh <-chan time.Time) <-chan *Doc {
 		app.Procs = ag.detectProcs(app)
 		// measure each process's resource usage
 		for _, p := range app.Procs {
-			//TODO(lizhong): configure the path of monitor.py
-			cmd := exec.Command("python",
-				"/home/lnz5/workspace/snapshot/app/monitor.py",
+			cmd := exec.Command("python", path.Join(dmoniPath, "snapshot/monitor.py"),
 				"-n", "1", strconv.Itoa(int(p.Pid)))
 			cmd.Stdout = &buf
 			if err := cmd.Run(); err != nil {
@@ -218,7 +232,7 @@ func (ag *Agent) appMonitor(timeCh <-chan time.Time) <-chan *Doc {
 
 	go func() {
 		defer close(docCh)
-		for _ := range timeCh {
+		for _ = range timeCh {
 			for _, app := range ag.getMoniList() {
 				moniOne(app)
 			}
@@ -234,9 +248,7 @@ func (ag *Agent) sysMonitor(timeCh <-chan time.Time) <-chan *Doc {
 		defer close(docCh)
 		var buf bytes.Buffer
 		for _ = range timeCh {
-			//TODO(lizhong): configure the path of monitor.py
-			cmd := exec.Command("python",
-				"/home/lnz5/workspace/snapshot/app/sysusage.py")
+			cmd := exec.Command("python", path.Join(dmoniPath, "/snapshot/sysusage.py"))
 			cmd.Stdout = &buf
 			if err := cmd.Run(); err != nil {
 				log.Printf("Failed to get system snapshot: %v", err)
@@ -283,16 +295,12 @@ func (ag *Agent) merger(docChs ...<-chan *Doc) chan *Doc {
 		wg.Wait()
 		close(outCh)
 	}()
-
 	return outCh
 }
 
 // store pulls data from a channel and pushes them into ElasticSearch
-func (ag Agent) store(docCh <-chan *Doc) {
-	for doc := range docCh {
-		log.Printf("%s: %s", doc.kind, string(doc.content))
-	}
-	/*
+func (ag *Agent) store(docCh <-chan *Doc) {
+	go func() {
 		// Create an ElasticSearch client
 		client, err := elastic.NewClient(
 			elastic.SetSniff(false),
@@ -302,6 +310,7 @@ func (ag Agent) store(docCh <-chan *Doc) {
 		}
 
 		// Check the existence of index; if not create one
+		// TODO(lizhong): move it to checkConfig()
 		exist, err := client.IndexExists("dmoni").Do()
 		if err != nil {
 			log.Fatalf("Failed to call IndexExists: %v", err)
@@ -313,14 +322,21 @@ func (ag Agent) store(docCh <-chan *Doc) {
 			}
 		}
 
-		for doc := range docCh {
-			_, err = client.Index().Index("dmoni").Type(doc.kind).
-				BodyString(string(doc.content[:])).Refresh(true).Do()
-			if err != nil {
-				log.Printf("Failed to store doc: %v", err)
-			}
+		// Creat a BulkProcessor in order to push docs in batch
+		bulk, err := client.BulkProcessor().
+			BulkActions(1000).BulkSize(5 * 1024 * 1024).
+			FlushInterval(time.Minute * 5).Do()
+		if err != nil {
+			log.Fatalf("Failed to create BulkProcessor")
 		}
-	*/
+		defer bulk.Close()
+
+		for doc := range docCh {
+			req := elastic.NewBulkIndexRequest().
+				Index("dmoni").Type(doc.kind).Doc(string(doc.content))
+			bulk.Add(req)
+		}
+	}()
 }
 
 // Detect an application's processes
@@ -348,75 +364,86 @@ func (ag *Agent) detectProcs(app *App) []common.Process {
 }
 
 // launch runs an application as a subprocess.
-func (ag *Agent) launch(appId string, exe string, arg ...string) (err error) {
-	app := &App{
-		Id:   appId,
-		exe:  exe,
-		args: arg,
-		sout: bytes.NewBuffer(make([]byte, 0, 1024)),
-		serr: bytes.NewBuffer(make([]byte, 0, 1024)),
-	}
-
-	// Run application as a child process
-	app.ctx, app.cancel = context.WithCancel(context.Background())
-	cmd := exec.CommandContext(app.ctx, exe, arg...)
-	cmd.Stdout = app.sout
-	cmd.Stderr = app.serr
-	err = cmd.Start()
-	if err != nil {
-		log.Printf("Failed to execute %s %v: %v", exe, arg, err)
-		return err
-	}
-	app.stime = time.Now()
-	app.EntryPid = cmd.Process.Pid
-
-	ag.lchApps.Lock()
-	ag.lchApps.m[app.Id] = app
-	ag.lchApps.Unlock()
-
-	data := map[string]interface{}{
-		"app_id":     app.Id,
-		"entry_node": ag.me.Ip,
-		"exec":       app.exe,
-		"args":       app.args,
-		"start_at":   app.stime.Format(time.RFC3339),
-		"timestamp":  time.Now().Format(time.RFC3339),
-	}
+func (ag *Agent) launch() chan *Doc {
+	// create a doc channel for storing app's info
+	docCh := make(chan *Doc, 1)
 
 	go func() {
-		// Wait the application exits
-		err = cmd.Wait()
-		if err != nil {
-			log.Printf("App %s exits with error: %v", app.Id, err)
-		} else {
-			log.Printf("App %s exits", app.Id)
-		}
-
-		select {
-		case <-app.ctx.Done():
-			// if application is killed by manager
-			log.Printf("App %s was killed", app.Id)
-			return
-		default:
-			app.etime = time.Now()
-			data["stdout"] = app.sout.String()
-			data["stderr"] = app.serr.String()
-			data["end_at"] = app.etime.Format(time.RFC3339)
-			data["timestamp"] = time.Now().Format(time.RFC3339)
-
-			if err != nil {
-				log.Printf("Failedd to marshal: %v", err)
+		defer close(docCh)
+		for e := range ag.lch {
+			app := &App{
+				Id:   e.appId,
+				exe:  e.cmd,
+				args: e.args,
+				sout: bytes.NewBuffer(make([]byte, 0, 1024)),
+				serr: bytes.NewBuffer(make([]byte, 0, 1024)),
 			}
 
-			ag.notifyDone(app)
+			// Run application as a child process
+			app.ctx, app.cancel = context.WithCancel(context.Background())
+			cmd := exec.CommandContext(app.ctx, app.exe, app.args...)
+			cmd.Stdout = app.sout
+			cmd.Stderr = app.serr
+			err := cmd.Start()
+			if err != nil {
+				log.Printf("Failed to execute %s %v: %v", app.exe, app.args, err)
+			}
+			// launching is done, return err
+			e.errCh <- err
+
+			app.stime = time.Now()
+			app.EntryPid = cmd.Process.Pid
 
 			ag.lchApps.Lock()
-			delete(ag.lchApps.m, app.Id)
+			ag.lchApps.m[app.Id] = app
 			ag.lchApps.Unlock()
+
+			data := map[string]interface{}{
+				"app_id":     app.Id,
+				"entry_node": ag.me.Ip,
+				"exec":       app.exe,
+				"args":       app.args,
+				"start_at":   app.stime.Format(time.RFC3339),
+				"timestamp":  time.Now().Format(time.RFC3339),
+			}
+
+			go func() {
+				// Wait the application exits
+				err = cmd.Wait()
+				if err != nil {
+					log.Printf("App %s exits with error: %v", app.Id, err)
+				} else {
+					log.Printf("App %s exits", app.Id)
+				}
+
+				select {
+				case <-app.ctx.Done():
+					// Application is killed by manager
+					log.Printf("App %s was killed", app.Id)
+					return
+				default:
+					// Push app info to output doc channel
+					app.etime = time.Now()
+					data["stdout"] = app.sout.String()
+					data["stderr"] = app.serr.String()
+					data["end_at"] = app.etime.Format(time.RFC3339)
+					data["timestamp"] = time.Now().Format(time.RFC3339)
+					marshaled, err := json.Marshal(data)
+					if err != nil {
+						log.Printf("Failed to marshal: %v", err)
+					}
+					docCh <- &Doc{kind: DocTypeApp, content: marshaled}
+
+					ag.notifyDone(app)
+					ag.lchApps.Lock()
+					delete(ag.lchApps.m, app.Id)
+					ag.lchApps.Unlock()
+				}
+			}()
 		}
 	}()
 
-	return nil
+	return docCh
 }
 
 // kill a launched application
@@ -538,97 +565,6 @@ func (ag *Agent) logApp(app *App) error {
 	}
 	return nil
 }
-
-/*
-// dataLogger retrieves process info from a data channel and
-// stores them in a temperary local file.
-func (ag *Agent) dataLogger(appId, fname string, dataCh <-chan *bytes.Buffer) {
-	// Create an temperary file
-	f, err := os.OpenFile(fname, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
-	if err != nil {
-		log.Printf("Failed to create output file %s: %v", fname, err)
-	}
-	defer f.Close()
-
-	for buf := range dataCh {
-		// Store process's performance data in a local file
-		var data interface{}
-		err = json.Unmarshal(buf.Bytes(), &data)
-		if err != nil {
-			log.Printf("Failed to unmarshal process snapshot %s: %v", buf.Bytes(), err)
-			continue
-		}
-		m := data.(map[string]interface{})
-		m["node"] = ag.me.Ip
-		m["app_id"] = appId
-		buf.Reset()
-
-		out, err := json.Marshal(m)
-		if err != nil {
-			log.Printf("Failed to marshal %v: %v", m, err)
-			continue
-		}
-		_, err = f.Write(out)
-		if err != nil {
-			log.Printf("Failed to write file %s: %v", fname, err)
-			continue
-		}
-	}
-}
-
-// storeData reads monitored data of an app, and push them to central database.
-func (ag *Agent) storeData(app *App) error {
-	// Open the file storing monitored data
-	f, err := os.Open(app.ofile)
-	defer f.Close()
-	if err != nil {
-		log.Printf("Failed to open file %s: %v", app.ofile, err)
-		return err
-	}
-
-	// Create an ElasticSearch client
-	client, err := elastic.NewClient(
-		elastic.SetSniff(false),
-		elastic.SetURL(ag.dsAddr))
-	if err != nil {
-		log.Printf("Failed to create ElasticSearch client: %v", err)
-		return err
-	}
-
-	// Check the existence of index; if not create one
-	exist, err := client.IndexExists("dmoni").Do()
-	if err != nil {
-		log.Fatalf("Failed to call IndexExists: %v", err)
-		return err
-	}
-	if !exist {
-		_, err = client.CreateIndex("dmoni").Do()
-		if err != nil {
-			log.Fatalf("Failed to create index: %v", err)
-			return err
-		}
-	}
-
-	// Read, decode and store JSON stream from the file
-	dec := json.NewDecoder(f)
-	var m map[string]interface{}
-	for dec.More() {
-		if err := dec.Decode(&m); err != nil {
-			log.Printf("Failed to decode: %v", err)
-			return err
-		}
-
-		_, err = client.Index().
-			Index("dmoni").Type("proc").
-			BodyJson(m).Refresh(true).Do()
-		if err != nil {
-			log.Printf("Failed to store proc doc: %v", err)
-			return err
-		}
-	}
-	return nil
-}
-*/
 
 // getLchApp returns the pointer to a launched app
 func (ag *Agent) getLchApp(id string) *App {
