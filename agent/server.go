@@ -40,11 +40,24 @@ func (s *agentServer) Run() {
 // Launch starts an application
 func (s *agentServer) Launch(ctx context.Context, in *pb.LchRequest) (*pb.LchReply, error) {
 	grpclog.Printf("Launch application %s", in.AppId)
-	err := s.ag.launch(in.AppId, in.ExecName, in.ExecArgs...)
+	appExec := AppExec{
+		appId: in.AppId,
+		cmd:   in.ExecName,
+		args:  in.ExecArgs,
+		errCh: make(chan error, 1),
+	}
+	select {
+	case s.ag.lch <- &appExec:
+	case <-ctx.Done():
+		return nil, errors.New("Failed to launch app: taking too long")
+	}
+
+	err := <-appExec.errCh
 	if err != nil {
 		log.Printf("Failed to launch app %s: %v", in.AppId, err)
 		return nil, err
 	}
+
 	return &pb.LchReply{}, nil
 }
 

@@ -17,7 +17,7 @@ import (
 
 const (
 	HbInterval   = time.Second * 15 // Agent's heartbeat interval
-	MoniInterval = time.Second * 5  // Monitoring time Interval
+	MoniInterval = time.Second * 10 // Monitoring time Interval
 )
 
 // Application info used for monitoring
