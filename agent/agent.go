@@ -108,7 +108,7 @@ type Config struct {
 
 type Doc struct {
 	kind    string
-	content []byte
+	content interface{}
 }
 
 const (
@@ -174,10 +174,10 @@ func (ag *Agent) Run() {
 
 	// Create a launcher to launch applications
 	ag.lch = make(chan *AppExec, 1)
-	appDocCh := ag.launch()
+	ag.launch(ag.lch)
 
 	// Merge collected info or doc from multiple sources
-	docCh := ag.merger(procDocCh, sysDocCh, appDocCh)
+	docCh := ag.merger(procDocCh, sysDocCh)
 
 	// Store collected docs to database
 	ag.store(docCh)
@@ -211,6 +211,7 @@ func (ag *Agent) appMonitor(timeCh <-chan time.Time) <-chan *Doc {
 				return
 			}
 
+			// push measured info to output channel
 			var data interface{}
 			if err := json.Unmarshal(buf.Bytes(), &data); err != nil {
 				log.Printf("Failed to unmarshal %s: %v", buf.Bytes(), err)
@@ -220,13 +221,7 @@ func (ag *Agent) appMonitor(timeCh <-chan time.Time) <-chan *Doc {
 			m := data.(map[string]interface{})
 			m["node"] = ag.me.Ip
 			m["app_id"] = app.Id
-			out, err := json.Marshal(m)
-			if err != nil {
-				log.Printf("Failed to marshal %v: %v", m, err)
-				return
-			}
-			// push measured info to output channel
-			docCh <- &Doc{kind: DocTypeProc, content: out}
+			docCh <- &Doc{kind: DocTypeProc, content: m}
 		}
 	}
 
@@ -255,6 +250,7 @@ func (ag *Agent) sysMonitor(timeCh <-chan time.Time) <-chan *Doc {
 				continue
 			}
 
+			// push measured info to output channel
 			var data interface{}
 			if err := json.Unmarshal(buf.Bytes(), &data); err != nil {
 				log.Printf("Failed to unmarshal %s: %v", buf.Bytes(), err)
@@ -263,13 +259,7 @@ func (ag *Agent) sysMonitor(timeCh <-chan time.Time) <-chan *Doc {
 			buf.Reset()
 			m := data.(map[string]interface{})
 			m["node"] = ag.me.Ip
-			out, err := json.Marshal(m)
-			if err != nil {
-				log.Printf("Failed to marshal %v: %v", m, err)
-				continue
-			}
-			// push measured info to output channel
-			docCh <- &Doc{kind: DocTypeSys, content: out}
+			docCh <- &Doc{kind: DocTypeSys, content: m}
 		}
 	}()
 	return docCh
@@ -298,47 +288,6 @@ func (ag *Agent) merger(docChs ...<-chan *Doc) chan *Doc {
 	return outCh
 }
 
-// store pulls data from a channel and pushes them into ElasticSearch
-func (ag *Agent) store(docCh <-chan *Doc) {
-	go func() {
-		// Create an ElasticSearch client
-		client, err := elastic.NewClient(
-			elastic.SetSniff(false),
-			elastic.SetURL(ag.dsAddr))
-		if err != nil {
-			log.Fatalf("Failed to create ElasticSearch client: %v", err)
-		}
-
-		// Check the existence of index; if not create one
-		// TODO(lizhong): move it to checkConfig()
-		exist, err := client.IndexExists("dmoni").Do()
-		if err != nil {
-			log.Fatalf("Failed to call IndexExists: %v", err)
-		}
-		if !exist {
-			_, err = client.CreateIndex("dmoni").Do()
-			if err != nil {
-				log.Fatalf("Failed to create index: %v", err)
-			}
-		}
-
-		// Creat a BulkProcessor in order to push docs in batch
-		bulk, err := client.BulkProcessor().
-			BulkActions(1000).BulkSize(5 * 1024 * 1024).
-			FlushInterval(time.Minute * 5).Do()
-		if err != nil {
-			log.Fatalf("Failed to create BulkProcessor")
-		}
-		defer bulk.Close()
-
-		for doc := range docCh {
-			req := elastic.NewBulkIndexRequest().
-				Index("dmoni").Type(doc.kind).Doc(string(doc.content))
-			bulk.Add(req)
-		}
-	}()
-}
-
 // Detect an application's processes
 func (ag *Agent) detectProcs(app *App) []common.Process {
 	procs := make([]common.Process, 0)
@@ -364,12 +313,8 @@ func (ag *Agent) detectProcs(app *App) []common.Process {
 }
 
 // launch runs an application as a subprocess.
-func (ag *Agent) launch() chan *Doc {
-	// create a doc channel for storing app's info
-	docCh := make(chan *Doc, 1)
-
+func (ag *Agent) launch(lch chan *AppExec) {
 	go func() {
-		defer close(docCh)
 		for e := range ag.lch {
 			app := &App{
 				Id:   e.appId,
@@ -398,14 +343,15 @@ func (ag *Agent) launch() chan *Doc {
 			ag.lchApps.m[app.Id] = app
 			ag.lchApps.Unlock()
 
-			data := map[string]interface{}{
-				"app_id":     app.Id,
-				"entry_node": ag.me.Ip,
-				"exec":       app.exe,
-				"args":       app.args,
-				"start_at":   app.stime.Format(time.RFC3339),
-				"timestamp":  time.Now().Format(time.RFC3339),
-			}
+			docId, _ := ag.storeOne(&Doc{kind: DocTypeApp,
+				content: map[string]interface{}{
+					"app_id":     app.Id,
+					"entry_node": ag.me.Ip,
+					"exec":       app.exe,
+					"args":       app.args,
+					"start_at":   app.stime.Format(time.RFC3339),
+					"timestamp":  time.Now().Format(time.RFC3339),
+				}})
 
 			go func() {
 				// Wait the application exits
@@ -422,17 +368,13 @@ func (ag *Agent) launch() chan *Doc {
 					log.Printf("App %s was killed", app.Id)
 					return
 				default:
-					// Push app info to output doc channel
 					app.etime = time.Now()
-					data["stdout"] = app.sout.String()
-					data["stderr"] = app.serr.String()
-					data["end_at"] = app.etime.Format(time.RFC3339)
-					data["timestamp"] = time.Now().Format(time.RFC3339)
-					marshaled, err := json.Marshal(data)
-					if err != nil {
-						log.Printf("Failed to marshal: %v", err)
-					}
-					docCh <- &Doc{kind: DocTypeApp, content: marshaled}
+					ag.updateDoc(docId, &Doc{kind: DocTypeApp,
+						content: map[string]interface{}{
+							"stdout": app.sout.String(),
+							"stderr": app.serr.String(),
+							"end_at": app.etime.Format(time.RFC3339),
+						}})
 
 					ag.notifyDone(app)
 					ag.lchApps.Lock()
@@ -442,8 +384,6 @@ func (ag *Agent) launch() chan *Doc {
 			}()
 		}
 	}()
-
-	return docCh
 }
 
 // kill a launched application
@@ -532,8 +472,8 @@ func (ag *Agent) notifyDone(app *App) {
 	}
 }
 
-// logApp stores the app's information in database.
-func (ag *Agent) logApp(app *App) error {
+// updateDoc update an ElasticSearch docment given doc id.
+func (ag *Agent) updateDoc(id string, doc *Doc) error {
 	// Create an ElasticSearch client
 	client, err := elastic.NewClient(
 		elastic.SetSniff(false),
@@ -543,27 +483,77 @@ func (ag *Agent) logApp(app *App) error {
 		return err
 	}
 
-	st := app.stime.Format(time.RFC3339)
-	et := app.etime.Format(time.RFC3339)
-	data := map[string]interface{}{
-		"app_id":     app.Id,
-		"entry_node": ag.me.Ip,
-		"exec":       app.exe,
-		"args":       app.args,
-		"start_at":   st,
-		"end_at":     et,
-		"stdout":     app.sout.String(),
-		"stderr":     app.serr.String(),
-		"timestamp":  time.Now().Format(time.RFC3339),
-	}
-	_, err = client.Index().
-		Index("dmoni").Type("app").
-		BodyJson(data).Refresh(true).Do()
+	// Push doc
+	_, err = client.Update().Index("dmoni").Type(doc.kind).
+		Id(id).Doc(doc.content).Refresh(true).Do()
 	if err != nil {
-		log.Printf("Failed to store data in ElasticSearch: %v", err)
+		log.Printf("Failed to update document: %v", err)
 		return err
 	}
 	return nil
+}
+
+// storeOne pushes a doc to ElasticSearch immediately.
+func (ag *Agent) storeOne(doc *Doc) (docId string, err error) {
+	// Create an ElasticSearch client
+	client, err := elastic.NewClient(
+		elastic.SetSniff(false),
+		elastic.SetURL(ag.dsAddr))
+	if err != nil {
+		log.Printf("Failed to create ElasticSearch client: %v", err)
+		return "", err
+	}
+
+	// Push doc
+	resp, err := client.Index().Index("dmoni").Type(doc.kind).
+		BodyJson(doc.content).Refresh(true).Do()
+	if err != nil {
+		log.Printf("Failed to index document: %v", err)
+		return "", err
+	}
+	docId = resp.Id
+	return docId, err
+}
+
+// store pulls data from a channel and pushes them into ElasticSearch
+func (ag *Agent) store(docCh <-chan *Doc) {
+	go func() {
+		// Create an ElasticSearch client
+		client, err := elastic.NewClient(
+			elastic.SetSniff(false),
+			elastic.SetURL(ag.dsAddr))
+		if err != nil {
+			log.Fatalf("Failed to create ElasticSearch client: %v", err)
+		}
+
+		// Check the existence of index; if not create one
+		// TODO(lizhong): move it to checkConfig()
+		exist, err := client.IndexExists("dmoni").Do()
+		if err != nil {
+			log.Fatalf("Failed to call IndexExists: %v", err)
+		}
+		if !exist {
+			_, err = client.CreateIndex("dmoni").Do()
+			if err != nil {
+				log.Fatalf("Failed to create index: %v", err)
+			}
+		}
+
+		// Creat a BulkProcessor in order to push docs in batch
+		bulk, err := client.BulkProcessor().
+			BulkActions(1).BulkSize(5 * 1024 * 1024).
+			FlushInterval(time.Minute * 5).Do()
+		if err != nil {
+			log.Fatalf("Failed to create BulkProcessor")
+		}
+		defer bulk.Close()
+
+		for doc := range docCh {
+			req := elastic.NewBulkIndexRequest().
+				Index("dmoni").Type(doc.kind).Doc(doc.content)
+			bulk.Add(req)
+		}
+	}()
 }
 
 // getLchApp returns the pointer to a launched app
