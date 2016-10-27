@@ -54,6 +54,16 @@ func (s *masterServer) SayHi(ctx context.Context, ni *mPb.NodeInfo) (*mPb.NodeIn
 		s.mng.agents.m[ni.Id] = ag
 		s.mng.agents.Unlock()
 		grpclog.Printf("New agent %s %s:%d", ni.Id, ni.Ip, ni.Port)
+
+		go func() {
+			// TODO(lizhong): bug - if an agent exits and rejoins with the same id,
+			// this will not be triggered.
+
+			// Send configurations to agent
+			newCtx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+			defer cancel()
+			s.mng.configAgent(newCtx, ag)
+		}()
 	}
 
 	ag.Timestamp = time.Now()

@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"path"
+	"time"
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -112,20 +113,6 @@ func (s *agentServer) Deregister(ctx context.Context, in *pb.DeregRequest) (*pb.
 	}
 	delete(apps.m, in.AppId)
 	apps.Unlock()
-
-	// TODO(lizhong): why in.Save?
-	/*
-		// Store app's perfromance data
-		if in.Save == true {
-			go func() {
-				err := s.ag.storeData(a)
-				if err != nil {
-					log.Printf("Failed to store app %s data: %v", a.Id, err)
-				}
-			}()
-		}
-	*/
-
 	return &pb.DeregReply{}, nil
 }
 
@@ -154,4 +141,10 @@ func (s *agentServer) GetProcesses(ctx context.Context, in *pb.ProcRequest) (*pb
 		}
 	}
 	return list, nil
+}
+
+// Congigure changes agent's configurations
+func (s *agentServer) Configure(ctx context.Context, in *pb.CfgRequest) (*pb.CfgReply, error) {
+	s.ag.moniItv = time.Duration(in.MoniInterval) * time.Second
+	return &pb.CfgReply{}, nil
 }
