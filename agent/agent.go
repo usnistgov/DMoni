@@ -90,11 +90,18 @@ type Agent struct {
 	// Application launch channel
 	lch chan *AppExec
 
+	// Heartbeat time interval in second
+	hbItv time.Duration
+	// Monitoring time Interval in second
+	moniItv time.Duration
+
 	//sync.RWMutex
 }
 
 type Config struct {
-	Id   string
+	// Agent's ID
+	Id string
+	// Agent's address
 	Ip   string
 	Port int32
 
@@ -136,7 +143,9 @@ func NewAgent(cfg *Config) *Agent {
 		manager: common.Node{Ip: cfg.MngIp, Port: cfg.MngPort},
 		me: common.Node{
 			Id: cfg.Id, Ip: cfg.Ip, Port: cfg.Port, Heartbeat: 0},
-		dsAddr: cfg.DsAddr,
+		dsAddr:  cfg.DsAddr,
+		hbItv:   manager.HbInterval,
+		moniItv: manager.MoniInterval,
 	}
 	ag.server = newServer(ag)
 
@@ -163,14 +172,10 @@ func (ag *Agent) Run() {
 	log.Printf("Dmoni Agent")
 
 	// Create an app monitor to measure apps' resources usages
-	at := time.NewTicker(manager.MoniInterval)
-	defer at.Stop()
-	procDocCh := ag.appMonitor(at.C)
+	procDocCh := ag.appMonitor()
 
 	// Create a system monitor to measure system's resource usages
-	st := time.NewTicker(manager.MoniInterval)
-	defer st.Stop()
-	sysDocCh := ag.sysMonitor(st.C)
+	sysDocCh := ag.sysMonitor()
 
 	// Create a launcher to launch applications
 	ag.lch = make(chan *AppExec, 1)
@@ -182,11 +187,14 @@ func (ag *Agent) Run() {
 	// Store collected docs to database
 	ag.store(docCh)
 
-	// Start agent's server
-	go ag.server.Run()
-
 	// Connect to manager and maintain the conenction
-	ag.cast()
+	go func() {
+		time.Sleep(1 * time.Second)
+		ag.cast()
+	}()
+
+	// Start agent's server
+	ag.server.Run()
 }
 
 // appMonitor meausures all applications' resource usages
@@ -195,7 +203,7 @@ func (ag *Agent) Run() {
 // 1) detect the application's processes;
 // 2) measure each process's resource usage;
 // 3) log the measured info.
-func (ag *Agent) appMonitor(timeCh <-chan time.Time) <-chan *Doc {
+func (ag *Agent) appMonitor() <-chan *Doc {
 	docCh := make(chan *Doc, 5)
 
 	moniOne := func(app *App) {
@@ -203,7 +211,8 @@ func (ag *Agent) appMonitor(timeCh <-chan time.Time) <-chan *Doc {
 		app.Procs = ag.detectProcs(app)
 		// measure each process's resource usage
 		for _, p := range app.Procs {
-			cmd := exec.Command("python", path.Join(dmoniPath, "snapshot/monitor.py"),
+			cmd := exec.Command("python", path.Join(dmoniPath,
+				"snapshot/monitor.py"),
 				"-n", "1", strconv.Itoa(int(p.Pid)))
 			cmd.Stdout = &buf
 			if err := cmd.Run(); err != nil {
@@ -227,23 +236,25 @@ func (ag *Agent) appMonitor(timeCh <-chan time.Time) <-chan *Doc {
 
 	go func() {
 		defer close(docCh)
-		for _ = range timeCh {
+		for {
 			for _, app := range ag.getMoniList() {
 				moniOne(app)
 			}
+			time.Sleep(ag.moniItv)
 		}
 	}()
 	return docCh
 }
 
 // sysMonitor measures system resource usage periodly
-func (ag *Agent) sysMonitor(timeCh <-chan time.Time) <-chan *Doc {
+func (ag *Agent) sysMonitor() <-chan *Doc {
 	docCh := make(chan *Doc, 5)
 	go func() {
 		defer close(docCh)
 		var buf bytes.Buffer
-		for _ = range timeCh {
-			cmd := exec.Command("python", path.Join(dmoniPath, "/snapshot/sysusage.py"))
+		for {
+			cmd := exec.Command("python",
+				path.Join(dmoniPath, "/snapshot/sysusage.py"))
 			cmd.Stdout = &buf
 			if err := cmd.Run(); err != nil {
 				log.Printf("Failed to get system snapshot: %v", err)
@@ -260,6 +271,8 @@ func (ag *Agent) sysMonitor(timeCh <-chan time.Time) <-chan *Doc {
 			m := data.(map[string]interface{})
 			m["node"] = ag.me.Ip
 			docCh <- &Doc{kind: DocTypeSys, content: m}
+
+			time.Sleep(ag.moniItv)
 		}
 	}()
 	return docCh
@@ -409,7 +422,7 @@ func (ag *Agent) cast() {
 	if err != nil {
 		// If failed to dial, retry later
 		grpclog.Printf("Failed to dial manager: %v", err)
-		time.Sleep(manager.HbInterval)
+		time.Sleep(ag.hbItv)
 		go ag.cast()
 		return
 	}
@@ -430,7 +443,7 @@ func (ag *Agent) cast() {
 			})
 		if err != nil {
 			grpclog.Printf("%v.SayHi(_) = _, %v: ", client, err)
-			time.Sleep(manager.HbInterval)
+			time.Sleep(ag.hbItv)
 			go ag.cast()
 			return
 		}
@@ -439,7 +452,7 @@ func (ag *Agent) cast() {
 		ag.manager.Id = ma.Id
 		ag.manager.Heartbeat = ma.Heartbeat
 
-		time.Sleep(manager.HbInterval)
+		time.Sleep(ag.hbItv)
 	}
 }
 

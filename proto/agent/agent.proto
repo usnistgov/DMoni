@@ -18,9 +18,12 @@ service MonitorProcs {
     // with a success indicator.
     rpc Deregister(DeregRequest) returns (DeregReply) {}
 
-    // Manager send application info, and agent responds
+    // Manager sends application info, and agent responds
     // with the app's processes' info on the node.
     rpc GetProcesses(ProcRequest) returns (ProcList) {}
+
+    // Congigure called by manager to change agent's configurations
+    rpc Configure(CfgRequest) returns (CfgReply) {}
 }
 
 message LchRequest {
@@ -77,9 +80,7 @@ message ProcList {
 
 // Reply message of Register()
 // 
-message RegReply {
-    
-}
+message RegReply { }
 
 // Request message of Deregister()
 message DeregRequest {
@@ -92,6 +93,11 @@ message DeregRequest {
 }
 
 // Reply message of Deregister()
-message DeregReply {
+message DeregReply { } 
+
+message CfgRequest {
+    // Time interval of monitoring applications and system, unit: second
+    int32 MoniInterval = 1;
 }
 
+message CfgReply {}

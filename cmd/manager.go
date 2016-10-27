@@ -21,6 +21,8 @@
 package cmd
 
 import (
+	"time"
+
 	"github.com/lizhongz/dmoni/manager"
 
 	"github.com/spf13/cobra"
@@ -30,6 +32,7 @@ import (
 var mAppPort int
 var mNodePort int
 var mId string
+var mItv int
 
 // managerCmd represents the manager command
 var managerCmd = &cobra.Command{
@@ -39,10 +42,11 @@ var managerCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		m := manager.NewManager(
 			&manager.Config{
-				Id:       mId,
-				NodePort: int32(mNodePort),
-				AppPort:  int32(mAppPort),
-				DsAddr:   dsAddr,
+				Id:           mId,
+				NodePort:     int32(mNodePort),
+				AppPort:      int32(mAppPort),
+				DsAddr:       dsAddr,
+				MoniInterval: time.Duration(mItv) * time.Second,
 			})
 		m.Run()
 	},
@@ -55,4 +59,5 @@ func init() {
 	managerCmd.Flags().IntVarP(&mAppPort, "app-port", "", 5500, "Port used to talk with dmoni application clients.")
 	managerCmd.Flags().IntVarP(&mNodePort, "node-port", "", 5300, "Port used to talk with dmoni agents.")
 	managerCmd.Flags().StringVarP(&mId, "id", "", "manager", "Name or identity for manager.")
+	managerCmd.Flags().IntVarP(&mItv, "interval", "", int(manager.HbInterval/time.Second), "Time interval of monitoring (unit: second).")
 }

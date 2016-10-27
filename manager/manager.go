@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	HbInterval   = time.Second * 15 // Agent's heartbeat interval
-	MoniInterval = time.Second * 10 // Monitoring time Interval
+	HbInterval   = 30 * time.Second // Default agent's heartbeat interval in second
+	MoniInterval = 30 * time.Second // Default monitoring time Interval in second
 )
 
 // Application info used for monitoring
@@ -82,6 +82,9 @@ type Manager struct {
 	// ElasticSearch server's address
 	dsAddr string
 
+	// Time interval of monitoring
+	moniItv time.Duration
+
 	sync.RWMutex
 }
 
@@ -99,6 +102,8 @@ type Config struct {
 	AppPort int32
 	// Data storage server's address
 	DsAddr string
+	// Time interval of monitoring
+	MoniInterval time.Duration
 }
 
 func NewManager(cfg *Config) *Manager {
@@ -119,6 +124,7 @@ func NewManager(cfg *Config) *Manager {
 	m.masterServer = newMasterServer(m)
 
 	m.dsAddr = cfg.DsAddr
+	m.moniItv = cfg.MoniInterval
 
 	return m
 }
@@ -155,6 +161,24 @@ func (m *Manager) checkAgents() {
 		}
 		time.Sleep(HbInterval * 2)
 	}
+}
+
+// configAgent sends configurations to a given agent
+func (m *Manager) configAgent(ctx context.Context, ag *common.Node) error {
+	client, closeConn, err := getAgentClient(ag.Ip, ag.Port)
+	if err != nil {
+		log.Printf("Failed getAgentClient(): %v", err)
+		return err
+	}
+	defer closeConn()
+
+	_, err = client.Configure(ctx, &agPb.CfgRequest{
+		MoniInterval: int32(m.moniItv.Seconds())})
+	if err != nil {
+		log.Printf("Failed to config agent %s: %v", ag.Id, err)
+		return err
+	}
+	return nil
 }
 
 // kill stops the launch app and discards all the collected info.
