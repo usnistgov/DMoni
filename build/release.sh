@@ -1,5 +1,7 @@
 #!/bin/bash
 
+VERSION="0.9.0"
+
 BUILD_PATH="$PWD"
 #BUILD_PATH="/tmp/dmoni/build"
 
@@ -8,7 +10,7 @@ BIN=dmoni
 SNAPSHOT=snapshot
 README=README.md
 
-# Check if temperary build dir exists
+# Check if build dir exists
 if [ ! -d "$BUILD_PATH" ]; then
     mkdir -p $BUILD_PATH
 fi
@@ -25,7 +27,7 @@ git clone --depth=1 git@gadget.ncsl.nist.gov:lizhong/snapshot.git $SNAPSHOT >/de
 cp $GOPATH/src/$REPO_PATH/README.md $README
 
 # Create a tarball
-tar --transform 's,^,dmoni/,' -zcvf $BIN.tar.gz $BIN $SNAPSHOT $README >/dev/null
+tar --transform 's,^,dmoni/,' -zcvf $BIN-$VERSION.tar.gz $BIN $SNAPSHOT $README >/dev/null
  
 # Clean up
 rm -rf $BIN $SNAPSHOT $README
