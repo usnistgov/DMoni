@@ -211,9 +211,10 @@ func (ag *Agent) appMonitor() <-chan *Doc {
 		app.Procs = ag.detectProcs(app)
 		// measure each process's resource usage
 		for _, p := range app.Procs {
-			cmd := exec.Command("python", path.Join(dmoniPath,
-				"snapshot/monitor.py"),
-				"-n", "1", strconv.Itoa(int(p.Pid)))
+			cmd := exec.Command("python",
+				path.Join(dmoniPath, "snapshot/monitor.py"),
+				"-n", "1", "--attrs", "cpu,mem_full,io",
+				strconv.Itoa(int(p.Pid)))
 			cmd.Stdout = &buf
 			if err := cmd.Run(); err != nil {
 				log.Printf("Failed to get process snapshot: %v", err)
