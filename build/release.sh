@@ -6,9 +6,10 @@ BUILD_PATH="$PWD"
 #BUILD_PATH="/tmp/dmoni/build"
 
 REPO_PATH="github.com/lizhongz/dmoni"
-BIN=dmoni
-SNAPSHOT=snapshot
-README=README.md
+FOLDER=dmoni-$VERSION
+BIN=$FOLDER/dmoni
+SNAPSHOT=$FOLDER/snapshot
+README=$FOLDER/README.md
 
 # Check if build dir exists
 if [ ! -d "$BUILD_PATH" ]; then
@@ -16,6 +17,7 @@ if [ ! -d "$BUILD_PATH" ]; then
 fi
 
 cd $BUILD_PATH
+mkdir $FOLDER
 
 # Build DMoni
 go build -o $BIN $REPO_PATH 
@@ -27,9 +29,9 @@ git clone --depth=1 git@gadget.ncsl.nist.gov:lizhong/snapshot.git $SNAPSHOT >/de
 cp $GOPATH/src/$REPO_PATH/README.md $README
 
 # Create a tarball
-tar --transform 's,^,dmoni/,' -zcvf $BIN-$VERSION.tar.gz $BIN $SNAPSHOT $README >/dev/null
+tar -zcvf $FOLDER.tar.gz $FOLDER >/dev/null
  
 # Clean up
-rm -rf $BIN $SNAPSHOT $README
+rm -rf $FOLDER
 
 cd - >/dev/null
