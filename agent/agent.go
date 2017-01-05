@@ -255,7 +255,7 @@ func (ag *Agent) sysMonitor() <-chan *Doc {
 		var buf bytes.Buffer
 		for {
 			cmd := exec.Command("python",
-				path.Join(dmoniPath, "/snapshot/sysusage.py"))
+				path.Join(dmoniPath, "snapshot/sysusage.py"))
 			cmd.Stdout = &buf
 			if err := cmd.Run(); err != nil {
 				log.Printf("Failed to get system snapshot: %v", err)

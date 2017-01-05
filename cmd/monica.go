@@ -21,44 +21,27 @@
 package cmd
 
 import (
-	"net"
-
-	"github.com/lizhongz/dmoni/agent"
-
 	"github.com/spf13/cobra"
 )
 
-var aId string  // Agent's ID
-var aIP net.IP  // Agent's IP address
-var aPort int   // Agent's port
-var aMIP net.IP // Manager's IP address
-var aMPort int  // Manager's port
-
-// agentCmd represents the agent command
-var agentCmd = &cobra.Command{
-	Use:   "agent",
-	Short: "Run Dmoni agent.",
+// monicaCmd represents the monica command.
+// The monica command has to be combined with subcommands including
+// - submit: start an application through dmoni;
+// - kill: kill a running applicaiton submitted through dmoni;
+// - app: query the status of an application.
+var MonicaCmd = &cobra.Command{
+	Use:   "monica",
+	Short: "Run DMoni client.",
 	Long:  ``,
-	Run: func(cmd *cobra.Command, args []string) {
-		ag := agent.NewAgent(
-			&agent.Config{
-				Id:      aId,
-				Ip:      aIP.String(),
-				Port:    int32(aPort),
-				MngIp:   aMIP.String(),
-				MngPort: int32(aMPort),
-				DsAddr:  dsAddr,
-			})
-		ag.Run()
-	},
+	// Uncomment the following line if your bare application
+	// has an action associated with it:
+	//	Run: func(cmd *cobra.Command, args []string) { },
 }
 
-func init() {
-	RootCmd.AddCommand(agentCmd)
+// Persitent flags
+var managerAddr string
 
-	agentCmd.Flags().StringVarP(&aId, "id", "", "", "Name or identity for agent.")
-	agentCmd.Flags().IPVarP(&aIP, "ip", "", nil, "Agent's ip address.")
-	agentCmd.Flags().IntVarP(&aPort, "port", "", 5301, "Agent's port.")
-	agentCmd.Flags().IPVarP(&aMIP, "mip", "", nil, "Manager's ip address.")
-	agentCmd.Flags().IntVarP(&aMPort, "mport", "", 5300, "Manager's port.")
+func init() {
+	RootCmd.AddCommand(MonicaCmd)
+	MonicaCmd.PersistentFlags().StringVar(&managerAddr, "manager", "", "DMoni manager's address")
 }

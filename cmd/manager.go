@@ -37,7 +37,7 @@ var mItv int
 // managerCmd represents the manager command
 var managerCmd = &cobra.Command{
 	Use:   "manager",
-	Short: "Run DMoni as a manager.",
+	Short: "Run DMoni manager.",
 	Long:  ``,
 	Run: func(cmd *cobra.Command, args []string) {
 		m := manager.NewManager(
