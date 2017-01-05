@@ -21,44 +21,46 @@
 package cmd
 
 import (
-	"net"
-
-	"github.com/lizhongz/dmoni/agent"
+	"github.com/lizhongz/dmoni/monica"
 
 	"github.com/spf13/cobra"
 )
 
-var aId string  // Agent's ID
-var aIP net.IP  // Agent's IP address
-var aPort int   // Agent's port
-var aMIP net.IP // Manager's IP address
-var aMPort int  // Manager's port
+// app command's flags
+var appId string
+var appPerf bool
+var sysPerf bool
 
-// agentCmd represents the agent command
-var agentCmd = &cobra.Command{
-	Use:   "agent",
-	Short: "Run Dmoni agent.",
-	Long:  ``,
+//var procs bool
+
+// appCmd represents the app command
+var appCmd = &cobra.Command{
+	Use:   "app",
+	Short: "Query an application's information.",
+	// TODO: long description
+	Long: ``,
 	Run: func(cmd *cobra.Command, args []string) {
-		ag := agent.NewAgent(
-			&agent.Config{
-				Id:      aId,
-				Ip:      aIP.String(),
-				Port:    int32(aPort),
-				MngIp:   aMIP.String(),
-				MngPort: int32(aMPort),
-				DsAddr:  dsAddr,
-			})
-		ag.Run()
+		monica.SetConfig(monica.Config{
+			DmoniAddr:   managerAddr,
+			StorageAddr: dsAddr,
+		})
+		if appPerf {
+			monica.AppPerf(appId)
+		}
+		if sysPerf {
+			monica.AppSysPerf(appId)
+		}
+		if !appPerf && !sysPerf {
+			monica.AppInfo(appId)
+		}
 	},
 }
 
 func init() {
-	RootCmd.AddCommand(agentCmd)
+	MonicaCmd.AddCommand(appCmd)
 
-	agentCmd.Flags().StringVarP(&aId, "id", "", "", "Name or identity for agent.")
-	agentCmd.Flags().IPVarP(&aIP, "ip", "", nil, "Agent's ip address.")
-	agentCmd.Flags().IntVarP(&aPort, "port", "", 5301, "Agent's port.")
-	agentCmd.Flags().IPVarP(&aMIP, "mip", "", nil, "Manager's ip address.")
-	agentCmd.Flags().IntVarP(&aMPort, "mport", "", 5300, "Manager's port.")
+	appCmd.Flags().StringVarP(&appId, "id", "", "", "Application Id")
+	//appCmd.Flags().BoolVarP(&procs, "procs", "", false, "Show application's processes")
+	appCmd.Flags().BoolVarP(&appPerf, "perf", "p", false, "Show measured application's performance")
+	appCmd.Flags().BoolVarP(&sysPerf, "sys-perf", "s", false, "Show measured systems' performance where the application was running")
 }

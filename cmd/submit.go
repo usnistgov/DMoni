@@ -23,42 +23,44 @@ package cmd
 import (
 	"net"
 
-	"github.com/lizhongz/dmoni/agent"
+	"github.com/lizhongz/dmoni/monica"
 
 	"github.com/spf13/cobra"
 )
 
-var aId string  // Agent's ID
-var aIP net.IP  // Agent's IP address
-var aPort int   // Agent's port
-var aMIP net.IP // Manager's IP address
-var aMPort int  // Manager's port
+// Flags
+var hostIP net.IP
+var frameworks []string
+var perf bool
 
-// agentCmd represents the agent command
-var agentCmd = &cobra.Command{
-	Use:   "agent",
-	Short: "Run Dmoni agent.",
-	Long:  ``,
+// submitCmd represents the submit command
+var submitCmd = &cobra.Command{
+	Use:   "submit",
+	Short: "Launch an application and start to monitor it with dmoni.",
+	// TODO: long description
+	Long: ``,
 	Run: func(cmd *cobra.Command, args []string) {
-		ag := agent.NewAgent(
-			&agent.Config{
-				Id:      aId,
-				Ip:      aIP.String(),
-				Port:    int32(aPort),
-				MngIp:   aMIP.String(),
-				MngPort: int32(aMPort),
-				DsAddr:  dsAddr,
-			})
-		ag.Run()
+		monica.SetConfig(monica.Config{
+			DmoniAddr:   managerAddr,
+			StorageAddr: dsAddr,
+		})
+		appSub := &monica.AppSub{
+			Entry:      &hostIP,
+			Cmd:        args[0],
+			Frameworks: frameworks,
+			Perf:       perf,
+		}
+		if len(args) > 1 {
+			appSub.Args = args[1:]
+		}
+		monica.Submit(appSub)
 	},
 }
 
 func init() {
-	RootCmd.AddCommand(agentCmd)
+	MonicaCmd.AddCommand(submitCmd)
 
-	agentCmd.Flags().StringVarP(&aId, "id", "", "", "Name or identity for agent.")
-	agentCmd.Flags().IPVarP(&aIP, "ip", "", nil, "Agent's ip address.")
-	agentCmd.Flags().IntVarP(&aPort, "port", "", 5301, "Agent's port.")
-	agentCmd.Flags().IPVarP(&aMIP, "mip", "", nil, "Manager's ip address.")
-	agentCmd.Flags().IntVarP(&aMPort, "mport", "", 5300, "Manager's port.")
+	submitCmd.Flags().IPVarP(&hostIP, "host", "", net.ParseIP("0.0.0.0"), "IP address of host to launch the application")
+	submitCmd.Flags().StringSliceVarP(&frameworks, "frameworks", "", []string{}, "Frameworks used, e.g. hadoop spark")
+	submitCmd.Flags().BoolVarP(&perf, "perf", "", false, "Enables monitoring applications performance metrics")
 }

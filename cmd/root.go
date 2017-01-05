@@ -64,7 +64,7 @@ func init() {
 	// when this action is called directly.
 	//RootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 
-	RootCmd.PersistentFlags().StringVar(&dsAddr, "ds", "", "Data storage's address")
+	RootCmd.PersistentFlags().StringVar(&dsAddr, "storage", "", "Data storage's address")
 }
 
 // initConfig reads in config file and ENV variables if set.
