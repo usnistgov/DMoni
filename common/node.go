@@ -5,9 +5,13 @@ import (
 )
 
 type Node struct {
-	Id        string
-	Ip        string
-	Port      int32
+	// Unique identity
+	Id string
+	// Node's address
+	Host string
+	Port int32
+	// Node's heartbeat counter
 	Heartbeat int32
+	// The timestamp when heartbeat counter was updated
 	Timestamp time.Time
 }

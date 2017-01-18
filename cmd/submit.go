@@ -21,31 +21,43 @@
 package cmd
 
 import (
-	"net"
-
-	"github.com/lizhongz/dmoni/monica"
+	"log"
+	"os"
 
 	"github.com/spf13/cobra"
+
+	"github.com/lizhongz/dmoni/monica"
 )
 
 // Flags
-var hostIP net.IP
-var frameworks []string
-var perf bool
+var (
+	host       string
+	frameworks []string
+	perf       bool
+)
 
 // submitCmd represents the submit command
 var submitCmd = &cobra.Command{
 	Use:   "submit",
 	Short: "Launch an application and start to monitor it with dmoni.",
-	// TODO: long description
-	Long: ``,
+	Long:  ``,
 	Run: func(cmd *cobra.Command, args []string) {
 		monica.SetConfig(monica.Config{
 			DmoniAddr:   managerAddr,
 			StorageAddr: dsAddr,
 		})
+
+		if len(host) == 0 {
+			var err error
+			host, err = os.Hostname()
+			if err != nil {
+				log.Fatal("Failed to get hostname")
+			}
+		}
+		log.Print(host)
+
 		appSub := &monica.AppSub{
-			Entry:      &hostIP,
+			Entry:      host,
 			Cmd:        args[0],
 			Frameworks: frameworks,
 			Perf:       perf,
@@ -60,7 +72,7 @@ var submitCmd = &cobra.Command{
 func init() {
 	MonicaCmd.AddCommand(submitCmd)
 
-	submitCmd.Flags().IPVarP(&hostIP, "host", "", net.ParseIP("0.0.0.0"), "IP address of host to launch the application")
+	submitCmd.Flags().StringVarP(&host, "host", "", "", "The host where the application will be launched (default: localhost's hostname)")
 	submitCmd.Flags().StringSliceVarP(&frameworks, "frameworks", "", []string{}, "Frameworks used, e.g. hadoop spark")
 	submitCmd.Flags().BoolVarP(&perf, "perf", "", false, "Enables monitoring applications performance metrics")
 }

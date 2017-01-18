@@ -94,8 +94,8 @@ type Manager struct {
 type Config struct {
 	// Manager's id
 	Id string
-	// Manager's IP address
-	Ip string
+	// Manager's address
+	Host string
 	// Port for agent services
 	NodePort int32
 	// Port for app services
@@ -115,7 +115,7 @@ func NewManager(cfg *Config) *Manager {
 
 	m.me = &common.Node{
 		Id:        cfg.Id,
-		Ip:        cfg.Ip,
+		Host:      cfg.Host,
 		Port:      cfg.NodePort,
 		Heartbeat: 0,
 		Timestamp: time.Now(),
@@ -130,7 +130,8 @@ func NewManager(cfg *Config) *Manager {
 }
 
 func (m *Manager) Run() {
-	log.Printf("Dmoni Manager")
+	log.Printf("Dmoni Manager (ID: %s, Address: %s:%d)",
+		m.me.Id, m.me.Host, m.me.Port)
 	go m.masterServer.Run()
 	go m.checkAgents()
 	m.appServer.Run()
@@ -165,7 +166,7 @@ func (m *Manager) checkAgents() {
 
 // configAgent sends configurations to a given agent
 func (m *Manager) configAgent(ctx context.Context, ag *common.Node) error {
-	client, closeConn, err := getAgentClient(ag.Ip, ag.Port)
+	client, closeConn, err := getAgentClient(ag.Host, ag.Port)
 	if err != nil {
 		log.Printf("Failed getAgentClient(): %v", err)
 		return err
@@ -194,7 +195,7 @@ func (m *Manager) kill(ctx context.Context, app *App) error {
 	if app.launched {
 		// Create an agent client
 		ag := m.findNode(app.EntryNode)
-		client, closeConn, err := getAgentClient(ag.Ip, ag.Port)
+		client, closeConn, err := getAgentClient(ag.Host, ag.Port)
 		if err != nil {
 			log.Printf("Failed getAgentClient(): %v", err)
 			return err
@@ -221,7 +222,7 @@ func (m *Manager) deregister(ctx context.Context, app *App, save bool) error {
 		go func(ag *common.Node) {
 			defer wg.Done()
 			// Create an agent client
-			client, closeConn, err := getAgentClient(ag.Ip, ag.Port)
+			client, closeConn, err := getAgentClient(ag.Host, ag.Port)
 			if err != nil {
 				log.Printf("Failed getAgentClient(): %v", err)
 				return
@@ -252,7 +253,7 @@ func (m *Manager) monitor(ctx context.Context, app *App) error {
 	// reg registers the app with a agent
 	reg := func(ag *common.Node) error {
 		// Create an agent client
-		client, closeConn, err := getAgentClient(ag.Ip, ag.Port)
+		client, closeConn, err := getAgentClient(ag.Host, ag.Port)
 		if err != nil {
 			log.Printf("Failed getAgentClient(): %v", err)
 			return err
@@ -282,7 +283,7 @@ func (m *Manager) monitor(ctx context.Context, app *App) error {
 			defer wg.Done()
 			if err := reg(ag); err != nil {
 				log.Printf("Failed to register app %s with (%s, %s): %v",
-					app.Id, ag.Id, ag.Ip, err)
+					app.Id, ag.Id, ag.Host, err)
 			}
 		}(ag)
 	}
@@ -294,12 +295,12 @@ func (m *Manager) monitor(ctx context.Context, app *App) error {
 	return nil
 }
 
-// findAgent returns node/agent corresponding to a given ip address
-func (m *Manager) findNode(ip string) *common.Node {
+// findAgent returns node/agent corresponding to a given address
+func (m *Manager) findNode(host string) *common.Node {
 	m.agents.RLock()
 	defer m.agents.RUnlock()
 	for _, ag := range m.agents.m {
-		if strings.Compare(ag.Ip, ip) == 0 {
+		if strings.Compare(ag.Host, host) == 0 {
 			return ag
 		}
 	}
@@ -325,13 +326,13 @@ func (m *Manager) getAgent(id string) *common.Node {
 }
 
 // getAgentClient returns a given agent's client
-func getAgentClient(ip string, port int32) (agPb.MonitorProcsClient, func() error, error) {
+func getAgentClient(host string, port int32) (agPb.MonitorProcsClient, func() error, error) {
 	//TODO(lizhong): Reuse connections to agents
 
 	// Create a grpc client to an agent
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithInsecure())
-	conn, err := grpc.Dial(fmt.Sprintf("%s:%d", ip, port), opts...)
+	conn, err := grpc.Dial(fmt.Sprintf("%s:%d", host, port), opts...)
 	if err != nil {
 		//grpclog.Printf("Failed to dial agent: %v", err)
 		return nil, nil, err

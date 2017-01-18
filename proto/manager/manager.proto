@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package manager;
 
+import "google/protobuf/timestamp.proto";
+
 // Interface exported by manager for cluster agents
 service Manager {
     // Agent pushes its node info to manager, and master responds
@@ -21,14 +23,15 @@ service Manager {
 message NodeInfo {
     // Id of the node
     string Id = 1;
-    // IP address
-    string Ip = 2;
+    // Node's address
+    string Host = 2;
     // IP address port
     int32  Port = 3;
     // The node's heartbeat value
     int32 Heartbeat = 4;
 }
 
+// NotifyDone's request
 message NDRequest {
     string AppId = 1;
     // Start time

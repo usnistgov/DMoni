@@ -21,18 +21,26 @@
 package cmd
 
 import (
-	"net"
+	"log"
+	"os"
+
+	"github.com/satori/go.uuid"
+	"github.com/spf13/cobra"
 
 	"github.com/lizhongz/dmoni/agent"
-
-	"github.com/spf13/cobra"
 )
 
-var aId string  // Agent's ID
-var aIP net.IP  // Agent's IP address
-var aPort int   // Agent's port
-var aMIP net.IP // Manager's IP address
-var aMPort int  // Manager's port
+// Define flags
+var (
+	// Agent's address
+	agHost string
+	// Agent's port
+	agPort int
+	// Manager's address
+	agMng string
+	// Manager's port
+	agMngPort int
+)
 
 // agentCmd represents the agent command
 var agentCmd = &cobra.Command{
@@ -40,13 +48,22 @@ var agentCmd = &cobra.Command{
 	Short: "Run Dmoni agent.",
 	Long:  ``,
 	Run: func(cmd *cobra.Command, args []string) {
+		if len(agHost) == 0 {
+			// If host not given, using hostname instead
+			var err error
+			agHost, err = os.Hostname()
+			if err != nil {
+				log.Fatal("Failed to get hostname")
+			}
+		}
+
 		ag := agent.NewAgent(
 			&agent.Config{
-				Id:      aId,
-				Ip:      aIP.String(),
-				Port:    int32(aPort),
-				MngIp:   aMIP.String(),
-				MngPort: int32(aMPort),
+				Id:      uuid.NewV4().String(),
+				Host:    agHost,
+				Port:    int32(agPort),
+				Mng:     agMng,
+				MngPort: int32(agMngPort),
 				DsAddr:  dsAddr,
 			})
 		ag.Run()
@@ -56,9 +73,8 @@ var agentCmd = &cobra.Command{
 func init() {
 	RootCmd.AddCommand(agentCmd)
 
-	agentCmd.Flags().StringVarP(&aId, "id", "", "", "Name or identity for agent.")
-	agentCmd.Flags().IPVarP(&aIP, "ip", "", nil, "Agent's ip address.")
-	agentCmd.Flags().IntVarP(&aPort, "port", "", 5301, "Agent's port.")
-	agentCmd.Flags().IPVarP(&aMIP, "mip", "", nil, "Manager's ip address.")
-	agentCmd.Flags().IntVarP(&aMPort, "mport", "", 5300, "Manager's port.")
+	agentCmd.Flags().StringVarP(&agHost, "host", "", "", "Host's address (hostname, IP address, etc.). (default: hostname)")
+	agentCmd.Flags().IntVarP(&agPort, "port", "p", 5301, "Agent's port.")
+	agentCmd.Flags().StringVarP(&agMng, "manager", "m", "", "Manager's address.")
+	agentCmd.Flags().IntVarP(&agMngPort, "manager-port", "", 5300, "Manager's port.")
 }

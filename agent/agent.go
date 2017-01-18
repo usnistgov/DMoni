@@ -102,13 +102,11 @@ type Config struct {
 	// Agent's ID
 	Id string
 	// Agent's address
-	Ip   string
+	Host string
 	Port int32
-
-	// Manager's ip and port
-	MngIp   string
+	// Manager's address
+	Mng     string
 	MngPort int32
-
 	// Data storage's address
 	DsAddr string
 }
@@ -140,9 +138,9 @@ func NewAgent(cfg *Config) *Agent {
 			"hadoop": &detector.HadoopDetector{},
 			"spark":  new(detector.SparkDetector),
 		},
-		manager: common.Node{Ip: cfg.MngIp, Port: cfg.MngPort},
+		manager: common.Node{Host: cfg.Mng, Port: cfg.MngPort},
 		me: common.Node{
-			Id: cfg.Id, Ip: cfg.Ip, Port: cfg.Port, Heartbeat: 0},
+			Id: cfg.Id, Host: cfg.Host, Port: cfg.Port, Heartbeat: 0},
 		dsAddr:  cfg.DsAddr,
 		hbItv:   manager.HbInterval,
 		moniItv: manager.MoniInterval,
@@ -169,7 +167,8 @@ func (ag *Agent) checkConfig() {
 
 func (ag *Agent) Run() {
 	ag.checkConfig()
-	log.Printf("Dmoni Agent")
+	log.Printf("Dmoni Agent (ID: %s, Address: %s:%d)",
+		ag.me.Id, ag.me.Host, ag.me.Port)
 
 	// Create an app monitor to measure apps' resources usages
 	procDocCh := ag.appMonitor()
@@ -229,7 +228,7 @@ func (ag *Agent) appMonitor() <-chan *Doc {
 			}
 			buf.Reset()
 			m := data.(map[string]interface{})
-			m["node"] = ag.me.Ip
+			m["node"] = ag.me.Host
 			m["app_id"] = app.Id
 			docCh <- &Doc{kind: DocTypeProc, content: m}
 		}
@@ -270,7 +269,7 @@ func (ag *Agent) sysMonitor() <-chan *Doc {
 			}
 			buf.Reset()
 			m := data.(map[string]interface{})
-			m["node"] = ag.me.Ip
+			m["node"] = ag.me.Host
 			docCh <- &Doc{kind: DocTypeSys, content: m}
 
 			time.Sleep(ag.moniItv)
@@ -360,7 +359,7 @@ func (ag *Agent) launch(lch chan *AppExec) {
 			docId, _ := ag.storeOne(&Doc{kind: DocTypeApp,
 				content: map[string]interface{}{
 					"app_id":     app.Id,
-					"entry_node": ag.me.Ip,
+					"entry_node": ag.me.Host,
 					"exec":       app.exe,
 					"args":       app.args,
 					"start_at":   app.stime.Format(time.RFC3339),
@@ -419,7 +418,7 @@ func (ag *Agent) cast() {
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithInsecure())
 	conn, err := grpc.Dial(fmt.Sprintf(
-		"%s:%d", ag.manager.Ip, ag.manager.Port), opts...)
+		"%s:%d", ag.manager.Host, ag.manager.Port), opts...)
 	if err != nil {
 		// If failed to dial, retry later
 		grpclog.Printf("Failed to dial manager: %v", err)
@@ -432,13 +431,13 @@ func (ag *Agent) cast() {
 
 	for {
 		// Say Hi to manager
-		grpclog.Printf("Say Hi to manager %s:%d",
-			ag.manager.Ip, ag.manager.Port)
+		grpclog.Printf("Say Hi to manager at %s:%d",
+			ag.manager.Host, ag.manager.Port)
 		ma, err := client.SayHi(
 			context.Background(),
 			&pb.NodeInfo{
 				Id:        ag.me.Id,
-				Ip:        ag.me.Ip,
+				Host:      ag.me.Host,
 				Port:      ag.me.Port,
 				Heartbeat: ag.me.Heartbeat,
 			})
@@ -464,7 +463,7 @@ func (ag *Agent) notifyDone(app *App) {
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithInsecure())
 	conn, err := grpc.Dial(fmt.Sprintf(
-		"%s:%d", ag.manager.Ip, ag.manager.Port), opts...)
+		"%s:%d", ag.manager.Host, ag.manager.Port), opts...)
 	if err != nil {
 		grpclog.Printf("Failed to dial manager: %v", err)
 		return
