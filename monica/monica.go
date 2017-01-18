@@ -3,7 +3,6 @@ package monica
 import (
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"time"
 
@@ -21,7 +20,7 @@ var (
 )
 
 type AppSub struct {
-	Entry      *net.IP
+	Entry      string
 	Cmd        string
 	Args       []string
 	Frameworks []string
@@ -50,7 +49,7 @@ func Submit(app *AppSub) {
 	defer cancel()
 
 	reply, err := client.Submit(ctx, &pb.SubRequest{
-		EntryNode:  app.Entry.String(),
+		EntryNode:  app.Entry,
 		ExecName:   app.Cmd,
 		ExecArgs:   app.Args,
 		Frameworks: app.Frameworks,

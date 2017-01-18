@@ -40,20 +40,20 @@ func (s *masterServer) Run() {
 
 // SayHi registers an agent or updates its info, particularly heartbeat.
 func (s *masterServer) SayHi(ctx context.Context, ni *mPb.NodeInfo) (*mPb.NodeInfo, error) {
-	grpclog.Printf("SayHi from %s", ni.Id)
+	grpclog.Printf("Hi from agent at %s:%d", ni.Host, ni.Port)
 
 	ag := s.mng.getAgent(ni.Id)
 	if ag == nil {
 		// New agent
 		ag = &common.Node{
 			Id:   ni.Id,
-			Ip:   ni.Ip,
+			Host: ni.Host,
 			Port: ni.Port,
 		}
 		s.mng.agents.Lock()
 		s.mng.agents.m[ni.Id] = ag
 		s.mng.agents.Unlock()
-		grpclog.Printf("New agent %s %s:%d", ni.Id, ni.Ip, ni.Port)
+		grpclog.Printf("New agent %s at %s:%d", ni.Id, ni.Host, ni.Port)
 
 		go func() {
 			// TODO(lizhong): bug - if an agent exits and rejoins with the same id,
@@ -71,7 +71,7 @@ func (s *masterServer) SayHi(ctx context.Context, ni *mPb.NodeInfo) (*mPb.NodeIn
 	// Return my node info
 	return &mPb.NodeInfo{
 		Id:        s.mng.me.Id,
-		Ip:        s.mng.me.Ip,
+		Host:      s.mng.me.Host,
 		Port:      s.mng.me.Port,
 		Heartbeat: s.mng.me.Heartbeat,
 	}, nil

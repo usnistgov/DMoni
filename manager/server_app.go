@@ -48,9 +48,9 @@ func (s *appServer) Submit(ctx context.Context, in *appPb.SubRequest) (*appPb.Ap
 	// Connect to the target node to launch the app
 	node := s.mng.findNode(in.EntryNode)
 	if node == nil {
-		return nil, errors.New(fmt.Sprintf("Node %d does not exist", in.EntryNode))
+		return nil, errors.New(fmt.Sprintf("Node %s does not exist", in.EntryNode))
 	}
-	client, close, err := getAgentClient(node.Ip, node.Port)
+	client, close, err := getAgentClient(node.Host, node.Port)
 	if err != nil {
 		log.Printf("Failed to get agent %s's client: %v", node.Id, err)
 		return nil, errors.New(fmt.Sprintf("Failed to connect to %s", in.EntryNode))
@@ -161,7 +161,7 @@ func (s *appServer) GetProcesses(ctx context.Context, in *appPb.AppIndex) (*appP
 		go func(ag *common.Node) {
 			defer wg.Done()
 			// Create an agent client
-			client, closeConn, err := getAgentClient(ag.Ip, ag.Port)
+			client, closeConn, err := getAgentClient(ag.Host, ag.Port)
 			if err != nil {
 				log.Printf("Failed getAgentClient(): %v", err)
 				return
@@ -177,7 +177,7 @@ func (s *appServer) GetProcesses(ctx context.Context, in *appPb.AppIndex) (*appP
 				grpclog.Printf("%v.GetProcesses(_) = _, %v", client, err)
 				return
 			}
-			agCh <- &agProcs{id: ag.Ip, reply: list}
+			agCh <- &agProcs{id: ag.Host, reply: list}
 		}(ag)
 	}
 	s.mng.agents.RUnlock()

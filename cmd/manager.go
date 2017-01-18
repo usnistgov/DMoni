@@ -21,18 +21,23 @@
 package cmd
 
 import (
+	"log"
+	"os"
 	"time"
 
-	"github.com/lizhongz/dmoni/manager"
-
+	"github.com/satori/go.uuid"
 	"github.com/spf13/cobra"
+
+	"github.com/lizhongz/dmoni/manager"
 )
 
 // Define flags
-var mAppPort int
-var mNodePort int
-var mId string
-var mItv int
+var (
+	mHost     string
+	mAppPort  int
+	mNodePort int
+	mItv      int
+)
 
 // managerCmd represents the manager command
 var managerCmd = &cobra.Command{
@@ -40,9 +45,19 @@ var managerCmd = &cobra.Command{
 	Short: "Run DMoni manager.",
 	Long:  ``,
 	Run: func(cmd *cobra.Command, args []string) {
+		if len(mHost) == 0 {
+			// If host not given, using hostname instead
+			var err error
+			mHost, err = os.Hostname()
+			if err != nil {
+				log.Fatal("Failed to get hostname")
+			}
+		}
+
 		m := manager.NewManager(
 			&manager.Config{
-				Id:           mId,
+				Id:           uuid.NewV4().String(),
+				Host:         mHost,
 				NodePort:     int32(mNodePort),
 				AppPort:      int32(mAppPort),
 				DsAddr:       dsAddr,
@@ -53,11 +68,10 @@ var managerCmd = &cobra.Command{
 }
 
 func init() {
-
 	RootCmd.AddCommand(managerCmd)
 
+	managerCmd.Flags().StringVarP(&mHost, "host", "", "", "Host' address (hostname, IP address, etc.). (default: hostname)")
 	managerCmd.Flags().IntVarP(&mAppPort, "app-port", "", 5500, "Port used to talk with dmoni application clients.")
 	managerCmd.Flags().IntVarP(&mNodePort, "node-port", "", 5300, "Port used to talk with dmoni agents.")
-	managerCmd.Flags().StringVarP(&mId, "id", "", "manager", "Name or identity for manager.")
 	managerCmd.Flags().IntVarP(&mItv, "interval", "", int(manager.HbInterval/time.Second), "Time interval of monitoring (unit: second).")
 }
