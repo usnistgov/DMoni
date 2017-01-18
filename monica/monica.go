@@ -41,7 +41,7 @@ func SetConfig(cfg Config) {
 func Submit(app *AppSub) {
 	client, close, err := newAppGaugeClient()
 	if err != nil {
-		fmt.Println("Unable to connect to AppGaugeServer: %v", err)
+		fmt.Printf("Unable to connect to AppGaugeServer: %v\n", err)
 		os.Exit(-1)
 	}
 	defer close()
@@ -67,7 +67,7 @@ func Submit(app *AppSub) {
 func Kill(appId string) {
 	client, close, err := newAppGaugeClient()
 	if err != nil {
-		fmt.Println("Unable to connect to AppGaugeServer: %v", err)
+		fmt.Printf("Unable to connect to AppGaugeServer: %v\n", err)
 		os.Exit(-1)
 	}
 	defer close()

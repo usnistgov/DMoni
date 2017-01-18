@@ -317,7 +317,7 @@ func (ag *Agent) detectProcs(app *App) []common.Process {
 		// Detect pocesses of this framework
 		fps, err := ag.detectors[fw].Detect(app.JobIds[i])
 		if err != nil {
-			log.Printf("Failed to detect processes: %s", app.Id, err)
+			log.Printf("Failed to detect processes %s: %v", app.Id, err)
 			continue
 		}
 		procs = append(procs, fps...)
