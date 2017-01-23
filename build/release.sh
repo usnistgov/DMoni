@@ -23,7 +23,7 @@ mkdir $FOLDER
 go build -o $BIN $REPO_PATH 
 
 # Copy snapshot repo
-git clone --depth=1 git@gadget.ncsl.nist.gov:lizhong/snapshot.git $SNAPSHOT >/dev/null && rm -rf $SNAPSHOT/.git
+git clone --depth=1 git@gitlab.ncsl.nist.gov:lnz5/snapshot.git $SNAPSHOT >/dev/null && rm -rf $SNAPSHOT/.git
 
 # Copy README
 cp $GOPATH/src/$REPO_PATH/README.md $README
