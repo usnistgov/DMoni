@@ -7,16 +7,6 @@
 #
 ################################################################################
 
-# variables must be specified by user
-DMONI_STORAGE=
-DMONI_MANAGER=
-
-# variables that can be customized. 
-# if a value is not given, the default value is used.
-DMONI_HOST=
-DMONI_PORT=
-DMONI_MANAGER_PORT=
-
 # some variables
 usage="Usage: dmoni_agent.sh (start|stop)"
 log=/tmp/dmoni_agent.out
@@ -30,6 +20,16 @@ fi
 
 if [ -z "$DMONIPATH" ]; then
     echo DMONIPATH is not set
+    exit 1
+fi
+
+if [ -z "$DMONI_STORAGE" ]; then
+    echo DMONI_STORAGE is not set
+    exit 1
+fi
+
+if [ -z "$DMONI_MANAGER" ]; then
+    echo DMONI_MANAGER is not set
     exit 1
 fi
 
