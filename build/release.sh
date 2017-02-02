@@ -2,36 +2,27 @@
 
 VERSION="0.9.0"
 
-BUILD_PATH="$PWD"
-#BUILD_PATH="/tmp/dmoni/build"
-
-REPO_PATH="github.com/lizhongz/dmoni"
-FOLDER=dmoni-$VERSION
-BIN=$FOLDER/dmoni
-SNAPSHOT=$FOLDER/snapshot
-README=$FOLDER/README.md
+TMP_DIR="$PWD/dmoni-$VERSION"
+REPO="github.com/lizhongz/dmoni"
+SRC_DIR="$GOPATH/src/$REPO"
 
 # Check if build dir exists
-if [ ! -d "$BUILD_PATH" ]; then
-    mkdir -p $BUILD_PATH
+if [ ! -d "$TMP_DIR" ]; then
+    mkdir -p $TMP_DIR/bin
 fi
 
-cd $BUILD_PATH
-mkdir $FOLDER
-
 # Build DMoni
-go build -o $BIN $REPO_PATH 
+go build -o $TMP_DIR/bin/dmoni $REPO
 
 # Copy snapshot repo
-git clone --depth=1 git@gitlab.ncsl.nist.gov:lnz5/snapshot.git $SNAPSHOT >/dev/null && rm -rf $SNAPSHOT/.git
+git clone --depth=1 git@gitlab.ncsl.nist.gov:lnz5/snapshot.git \
+    $TMP_DIR/snapshot >/dev/null && rm -rf $TMP_DIR/snapshot/.git
 
-# Copy README
-cp $GOPATH/src/$REPO_PATH/README.md $README
+cp $SRC_DIR/README.md $TMP_DIR
+cp $SRC_DIR/tools/dmoni_manager.sh $SRC_DIR/tools/dmoni_agent.sh $TMP_DIR/bin
 
 # Create a tarball
-tar -zcvf $FOLDER.tar.gz $FOLDER >/dev/null
+tar -zcvf dmoni-$VERSION.tar.gz -C $TMP_DIR/.. $(basename $TMP_DIR) >/dev/null
  
 # Clean up
-rm -rf $FOLDER
-
-cd - >/dev/null
+rm -rf $TMP_DIR
