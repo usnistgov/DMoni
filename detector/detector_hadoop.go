@@ -3,7 +3,7 @@ package detector
 import (
 	"strings"
 
-	"github.com/lizhongz/dmoni/common"
+	"github.com/usnistgov/DMoni/common"
 )
 
 type HadoopDetector struct{}

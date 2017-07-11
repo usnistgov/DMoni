@@ -21,7 +21,7 @@
 package cmd
 
 import (
-	"github.com/lizhongz/dmoni/monica"
+	"github.com/usnistgov/DMoni/monica"
 
 	"github.com/spf13/cobra"
 )

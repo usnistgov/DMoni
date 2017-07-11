@@ -20,7 +20,7 @@
 
 package main
 
-import "github.com/lizhongz/dmoni/cmd"
+import "github.com/usnistgov/DMoni/cmd"
 
 func main() {
 	cmd.Execute()

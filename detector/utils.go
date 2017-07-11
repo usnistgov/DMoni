@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lizhongz/dmoni/common"
+	"github.com/usnistgov/DMoni/common"
 )
 
 // Execute command line tool jps to retrive java applications

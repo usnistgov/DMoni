@@ -19,10 +19,10 @@ import (
 	"google.golang.org/grpc/grpclog"
 	"gopkg.in/olivere/elastic.v3"
 
-	"github.com/lizhongz/dmoni/common"
-	"github.com/lizhongz/dmoni/detector"
-	"github.com/lizhongz/dmoni/manager"
-	pb "github.com/lizhongz/dmoni/proto/manager"
+	"github.com/usnistgov/DMoni/common"
+	"github.com/usnistgov/DMoni/detector"
+	"github.com/usnistgov/DMoni/manager"
+	pb "github.com/usnistgov/DMoni/proto/manager"
 )
 
 var (

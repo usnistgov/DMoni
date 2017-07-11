@@ -11,8 +11,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/grpclog"
 
-	"github.com/lizhongz/dmoni/common"
-	mPb "github.com/lizhongz/dmoni/proto/manager"
+	"github.com/usnistgov/DMoni/common"
+	mPb "github.com/usnistgov/DMoni/proto/manager"
 )
 
 var ()

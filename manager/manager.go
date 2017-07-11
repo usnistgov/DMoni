@@ -11,8 +11,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/grpclog"
 
-	"github.com/lizhongz/dmoni/common"
-	agPb "github.com/lizhongz/dmoni/proto/agent"
+	"github.com/usnistgov/DMoni/common"
+	agPb "github.com/usnistgov/DMoni/proto/agent"
 )
 
 const (

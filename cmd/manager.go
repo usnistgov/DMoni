@@ -28,7 +28,7 @@ import (
 	"github.com/satori/go.uuid"
 	"github.com/spf13/cobra"
 
-	"github.com/lizhongz/dmoni/manager"
+	"github.com/usnistgov/DMoni/manager"
 )
 
 // Define flags

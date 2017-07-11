@@ -3,7 +3,7 @@
 VERSION="0.9.0"
 
 TMP_DIR="$PWD/dmoni-$VERSION"
-REPO="github.com/lizhongz/dmoni"
+REPO="github.com/usnistgov/DMoni"
 SRC_DIR="$GOPATH/src/$REPO"
 
 # Check if build dir exists

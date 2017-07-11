@@ -15,9 +15,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/grpclog"
 
-	"github.com/lizhongz/dmoni/common"
-	agPb "github.com/lizhongz/dmoni/proto/agent"
-	appPb "github.com/lizhongz/dmoni/proto/app"
+	"github.com/usnistgov/DMoni/common"
+	agPb "github.com/usnistgov/DMoni/proto/agent"
+	appPb "github.com/usnistgov/DMoni/proto/app"
 )
 
 type appServer struct {

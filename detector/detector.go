@@ -1,7 +1,7 @@
 package detector
 
 import (
-	"github.com/lizhongz/dmoni/common"
+	"github.com/usnistgov/DMoni/common"
 )
 
 type Detector interface {

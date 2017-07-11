@@ -12,8 +12,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/grpclog"
 
-	"github.com/lizhongz/dmoni/common"
-	pb "github.com/lizhongz/dmoni/proto/agent"
+	"github.com/usnistgov/DMoni/common"
+	pb "github.com/usnistgov/DMoni/proto/agent"
 )
 
 type agentServer struct {

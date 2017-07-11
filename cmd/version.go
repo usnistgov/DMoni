@@ -23,7 +23,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/lizhongz/dmoni/version"
+	"github.com/usnistgov/DMoni/version"
 
 	"github.com/spf13/cobra"
 )

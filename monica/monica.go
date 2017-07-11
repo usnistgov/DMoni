@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc/grpclog"
 	"gopkg.in/olivere/elastic.v3"
 
-	pb "github.com/lizhongz/dmoni/proto/app"
+	pb "github.com/usnistgov/DMoni/proto/app"
 )
 
 var (

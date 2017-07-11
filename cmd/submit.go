@@ -26,7 +26,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/lizhongz/dmoni/monica"
+	"github.com/usnistgov/DMoni/monica"
 )
 
 // Flags
