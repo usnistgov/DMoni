@@ -9,28 +9,27 @@
 #### Step 1. Download the prebuilt package.
 ```
 $ wget https://192.168.0.5:8080/swift/v1/dmoni/dmoni-0.9.0.tar.gz 
-$ tar -xvf ./dmoni-0.9.0.tar.gz -C /tmp
-$ cd /tmp/dmoni && ls
-dmoni  README.md  snapshot
+$ tar -xvf ./dmoni-VERSION.tar.gz -C /tmp
+$ mv /tmp/dmoni-VERSION /tmp/dmoni && ls /tmp/dmoni
+bin  docs  README.md  snapshot
 ```
-We can see that three files are included:
-* dmoni: the binary file of DMoni;
-* snapshot: python package used to obtain process and system's resource usages;
-* README.md.
+
+The snapshot is a python package used to obtain process and system's resource usages;
 
 #### Step 2. Install snapshot package's dependencies
 
 ```
-$ cd /tmp/dmoni/snapshot && ls 
-LICENSE.txt  README.md  setup.py  snapshot
+$ cd /tmp/dmoni/snapshot
 $ pip install .
 ```
 
-#### step 3. Creat a path for DMoni
+#### step 3. Install DMoni
 
 ```
 $ mkdir /usr/local/dmoni
-$ cp -R /tmp/dmoni/dmoni /tmp/dmoni/snapshot/snapshot /usr/local/dmoni
+$ cp -R /tmp/dmoni/bin /tmp/dmoni/snapshot/snapshot /usr/local/dmoni
+$ export PATH=$PATH:/usr/local/dmoni/bin
+$ export DMONIPATH="/usr/local/dmoni"
 ```
 The path created will be exported later, so that dmoni can find where the
 snapshot pachage is.
@@ -45,14 +44,14 @@ run with sudo previlege.
 
 #### Run dmoni manager
 ```
-$ sudo /usr/local/dmoni/dmoni manager --storage "http://192.168.0.3:9200"
+$ sudo dmoni manager --storage "http://192.168.0.3:9200"
 2016/10/28 15:44:20 Dmoni Manager
 ```
 The ```--storage``` option is the address of ElasticSearch.
 
 #### Run agent-0
 ```
-$ sudo env DMONIPATH="/usr/local/dmoni"  /usr/local/dmoni/dmoni agent \
+$ sudo dmoni agent \
   --id agent-0 --ip 192.168.0.6 --port 5301 \
   --mip 127.0.0.1 --storage "http://192.168.0.3:9200" 
 2016/10/28 15:52:42 Dmoni Agent
@@ -63,7 +62,7 @@ and data storage (ElasticSearch) 's address.
 
 #### Run agent-1
 ```
-$ sudo env DMONIPATH="/usr/local/dmoni"  /usr/local/dmoni/dmoni agent \
+$ sudo dmoni agent \
   --id agent-1 --ip 192.168.0.6 --port 5302 \
   --mip 127.0.0.1 --storage "http://192.168.0.3:9200" 
 2016/10/28 15:54:41 Dmoni Agent
@@ -114,7 +113,6 @@ of and kill the application afterwards.
 $ dmoni monica app --manager 192.168.0.6 \
   --storage "http://192.168.0.3:9200" \
   --id a5da8a13486849e2b2f7317cc1362083
-Using config file: /home/lnz5/.monica.yaml
 {
         "app_id" : "a5da8a13486849e2b2f7317cc1362083",
         "args" : [ "SparkPi", "300" ],
@@ -252,5 +250,3 @@ usage, memory usage, disk IO counter and network IO counter.
 ```
 $ dmoni monica kill --id a5da8a13486849e2b2f7317cc1362083
 ```
-
-## License
