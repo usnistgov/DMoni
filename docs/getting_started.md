@@ -2,7 +2,7 @@
 
 ### Prerequisites
 
-* ElasticSearch: a document-oriented databse used to store benchmark data.
+* [ElasticSearch](https://www.elastic.co/), a document-oriented databse used to store benchmark data.
 
 ### Installing
 
