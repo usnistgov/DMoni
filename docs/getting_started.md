@@ -8,7 +8,7 @@
 
 #### Step 1. Download the prebuilt package.
 ```
-$ wget https://192.168.0.5:8080/swift/v1/dmoni/dmoni-0.9.0.tar.gz 
+$ wget https://github.com/usnistgov/dmoni/files/1045176/dmoni-0.9.0.tar.gz
 $ tar -xvf ./dmoni-VERSION.tar.gz -C /tmp
 $ mv /tmp/dmoni-VERSION /tmp/dmoni && ls /tmp/dmoni
 bin  docs  README.md  snapshot
